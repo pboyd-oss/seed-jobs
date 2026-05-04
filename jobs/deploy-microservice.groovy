@@ -4,10 +4,8 @@ pipelineJob('deploy-microservice') {
         cpsScm {
             scm {
                 git {
-                    remote {
-                        url('https://github.com/pboyd-oss/microservice-pipeline.git')
-                    }
-                    branch('*/main')
+                    remote { url('https://github.com/pboyd-oss/microservice-pipeline.git') }
+                    branch('main')
                 }
             }
             scriptPath('Jenkinsfile')
