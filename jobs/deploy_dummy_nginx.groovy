@@ -3,7 +3,7 @@ pipelineJob('deploy-dummy-nginx') {
     definition {
         cpsScm {
             scm {
-                git {
+                gitSource {
                     remote { url('https://github.com/pboyd-oss/nginx-pipeline.git') }
                     branch('main')
                 }
