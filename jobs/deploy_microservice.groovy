@@ -3,7 +3,7 @@ pipelineJob('deploy-microservice') {
     definition {
         cpsScm {
             scm {
-                gitSource {
+                git {
                     remote { url('https://github.com/pboyd-oss/microservice-pipeline.git') }
                     branch('main')
                 }
