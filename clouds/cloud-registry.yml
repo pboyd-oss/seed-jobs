@@ -1,0 +1,80 @@
+clouds:
+  - name: build-shared
+    type: kubernetes
+    server: https://k8s-build.tuxgrid.com
+    credentials_id: kubeconfig-build-shared
+    purpose: build
+    allowed_teams:
+      - team-a
+      - team-b
+      - team-c
+    registry:
+      url: gitea.tuxgrid.com
+      credentials_id: shared-registry
+    pod_templates:
+      - name: base
+        service_account: jenkins-agent
+        containers:
+          - name: skaffold
+            image: gitea.tuxgrid.com/platform/jenkins-agent-skaffold:latest
+            command: cat
+            tty: true
+            resources:
+              requests: { cpu: "500m", memory: "1Gi" }
+              limits:   { cpu: "2",    memory: "4Gi" }
+          - name: golang
+            image: golang:1.22
+            command: cat
+            tty: true
+            resources:
+              requests: { cpu: "500m", memory: "512Mi" }
+              limits:   { cpu: "2",    memory: "2Gi" }
+
+  - name: build-team-d
+    type: kubernetes
+    server: https://k8s-build-d.tuxgrid.com
+    credentials_id: kubeconfig-build-team-d
+    purpose: build
+    allowed_teams:
+      - team-d
+    registry:
+      url: gitea.tuxgrid.com
+      credentials_id: team-d-registry
+    pod_templates:
+      - name: base
+        service_account: jenkins-agent
+        containers:
+          - name: skaffold
+            image: gitea.tuxgrid.com/platform/jenkins-agent-skaffold:latest
+            command: cat
+            tty: true
+            resources:
+              requests: { cpu: "1",   memory: "2Gi" }
+              limits:   { cpu: "4",   memory: "8Gi" }
+
+  - name: deploy-prod-eu
+    type: kubernetes
+    server: https://prod-eu.platform.tuxgrid.com
+    credentials_id: kubeconfig-deploy-prod-eu
+    purpose: deploy
+    allowed_teams:
+      - team-a
+      - team-b
+
+  - name: deploy-prod-us
+    type: kubernetes
+    server: https://prod-us.platform.tuxgrid.com
+    credentials_id: kubeconfig-deploy-prod-us
+    purpose: deploy
+    allowed_teams:
+      - team-a
+
+  - name: deploy-staging
+    type: kubernetes
+    server: https://staging.platform.tuxgrid.com
+    credentials_id: kubeconfig-deploy-staging
+    purpose: deploy
+    allowed_teams:
+      - team-a
+      - team-b
+      - team-c

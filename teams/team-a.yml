@@ -1,0 +1,47 @@
+team:
+  name: "Team Alpha"
+  slug: team-a
+  build_cloud: build-shared
+
+  members:
+    - username: jdoe
+      role: admin
+    - username: jsmith
+      role: developer
+
+  repositories:
+    - name: auth-api
+      url: git@git.tuxgrid.com:team-a/auth-api.git
+      jobs:
+        - name: build
+          type: multibranch
+          jenkinsfile: Jenkinsfile
+        - name: release
+          type: pipeline
+          branch: main
+          jenkinsfile: Jenkinsfile.release
+
+    - name: data-api
+      url: git@git.tuxgrid.com:team-a/data-api.git
+      jobs:
+        - name: build
+          type: multibranch
+          jenkinsfile: Jenkinsfile
+        - name: nightly-cleanup
+          type: pipeline
+          branch: main
+          jenkinsfile: Jenkinsfile.cleanup
+          cron: "H 2 * * *"
+
+  environments:
+    - name: dev
+      cloud: build-shared
+    - name: staging
+      cloud: deploy-staging
+      namespace: team-a-staging
+    - name: production-eu
+      cloud: deploy-prod-eu
+      namespace: team-a-prod
+    - name: production-us
+      cloud: deploy-prod-us
+      namespace: team-a-prod
