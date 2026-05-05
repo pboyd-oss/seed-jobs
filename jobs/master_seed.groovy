@@ -12,8 +12,7 @@ pipelineJob('seed/master-seed') {
             scm {
                 git {
                     remote {
-                        url('git@git.tuxgrid.com:admin/seed-jobs.git')
-                        credentials('git-deploy-key')
+                        url('https://github.com/pboyd-oss/seed-jobs.git')
                     }
                     branch('main')
                 }
