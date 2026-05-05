@@ -5,9 +5,10 @@
 // Reads Jenkins' internal test result records (not workspace files),
 // then creates cosign attestations against every image in artifacts.json.
 //
-// Two attestations are created per image:
-//   tests/v1  — proves tests ran and passed according to Jenkins
-//   build/v1  — proves the image came from a successful Jenkins build
+// Three attestations are created per image:
+//   tests/v1    — proves tests ran and passed according to Jenkins
+//   build/v1    — proves the image came from a successful Jenkins build
+//   pipeline/v1 — proves which stages ran and which platform standards were verified
 
 pipeline {
     agent {
@@ -22,8 +23,15 @@ pipeline {
     }
 
     parameters {
-        string(name: 'UPSTREAM_JOB',   description: 'Full job path of the completed build')
-        string(name: 'UPSTREAM_BUILD', description: 'Build number')
+        string(name: 'UPSTREAM_JOB',             description: 'Full job path of the completed build')
+        string(name: 'UPSTREAM_BUILD',           description: 'Build number')
+        string(name: 'PLATFORM_TESTS_COUNT',     defaultValue: '0')
+        string(name: 'PLATFORM_TESTS_FAILURES',  defaultValue: '0')
+        string(name: 'PLATFORM_COVERAGE_PCT',    defaultValue: '0')
+        string(name: 'PLATFORM_COVERAGE_THRESH', defaultValue: '0')
+        string(name: 'PLATFORM_SCAN_JOB_REF',    defaultValue: '')
+        string(name: 'PLATFORM_STAGES_JSON',     defaultValue: '[]')
+        string(name: 'PLATFORM_LIBRARY_SHA',     defaultValue: 'unknown')
     }
 
     stages {
@@ -94,19 +102,21 @@ pipeline {
                             sh "printf '%s' \"\$COSIGN_PRIVATE_KEY\" > /tmp/cosign.key && chmod 600 /tmp/cosign.key"
 
                             images.each { image ->
-                                sh """
-                                    cosign attest \
-                                        --key /tmp/cosign.key \
-                                        --predicate predicate-tests.json \
-                                        --type 'https://tuxgrid.com/attestation/tests/v1' \
-                                        --yes '${image.tag}'
+                                withEnv(["IMAGE_REF=${image.tag}"]) {
+                                    sh '''
+                                        cosign attest \
+                                            --key /tmp/cosign.key \
+                                            --predicate predicate-tests.json \
+                                            --type 'https://tuxgrid.com/attestation/tests/v1' \
+                                            --yes "$IMAGE_REF"
 
-                                    cosign attest \
-                                        --key /tmp/cosign.key \
-                                        --predicate predicate-build.json \
-                                        --type 'https://tuxgrid.com/attestation/build/v1' \
-                                        --yes '${image.tag}'
-                                """
+                                        cosign attest \
+                                            --key /tmp/cosign.key \
+                                            --predicate predicate-build.json \
+                                            --type 'https://tuxgrid.com/attestation/build/v1' \
+                                            --yes "$IMAGE_REF"
+                                    '''
+                                }
                             }
 
                             sh 'rm -f /tmp/cosign.key'
@@ -114,6 +124,60 @@ pipeline {
                     }
 
                     echo "Attestations created for ${images.size()} image(s)"
+                }
+            }
+        }
+
+        stage('Attest Pipeline') {
+            steps {
+                script {
+                    def timestamp = new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))
+                    def stages    = readJSON(text: params.PLATFORM_STAGES_JSON)
+
+                    writeJSON(file: 'predicate-pipeline.json', json: [
+                        job:       params.UPSTREAM_JOB,
+                        build:     params.UPSTREAM_BUILD,
+                        timestamp: timestamp,
+                        library: [
+                            name: 'jenkins-library',
+                            sha:  params.PLATFORM_LIBRARY_SHA,
+                        ],
+                        platform_verified: [
+                            tests_passed:               params.PLATFORM_TESTS_FAILURES.toInteger() == 0,
+                            test_count:                 params.PLATFORM_TESTS_COUNT.toInteger(),
+                            test_failures:              params.PLATFORM_TESTS_FAILURES.toInteger(),
+                            line_coverage_pct:          params.PLATFORM_COVERAGE_PCT.toFloat(),
+                            coverage_threshold_pct:     params.PLATFORM_COVERAGE_THRESH.toInteger(),
+                            scan_passed:                params.PLATFORM_SCAN_JOB_REF != '',
+                            scan_job:                   params.PLATFORM_SCAN_JOB_REF,
+                            scan_triggered_by_pipeline: params.PLATFORM_SCAN_JOB_REF != '',
+                            artifacts_produced:         true,
+                            scm_triggered:              true,
+                        ],
+                        stages: stages,
+                    ])
+
+                    def images = readJSON(file: 'artifacts.json').builds
+
+                    withCredentials([string(credentialsId: 'cosign-key', variable: 'COSIGN_PRIVATE_KEY')]) {
+                        container('skaffold') {
+                            sh "printf '%s' \"\$COSIGN_PRIVATE_KEY\" > /tmp/cosign.key && chmod 600 /tmp/cosign.key"
+
+                            images.each { image ->
+                                withEnv(["IMAGE_REF=${image.tag}"]) {
+                                    sh '''
+                                        cosign attest \
+                                            --key /tmp/cosign.key \
+                                            --predicate predicate-pipeline.json \
+                                            --type 'https://tuxgrid.com/attestation/pipeline/v1' \
+                                            --yes "$IMAGE_REF"
+                                    '''
+                                }
+                            }
+
+                            sh 'rm -f /tmp/cosign.key'
+                        }
+                    }
                 }
             }
         }

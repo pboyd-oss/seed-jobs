@@ -1,0 +1,170 @@
+// Platform infrastructure policy scan.
+// Validates the platform's own IAM and Kubernetes policy code using the same
+// scanner stack used for team builds — Trivy + Checkov on platform infrastructure.
+//
+// Scanned paths (relative to the platform repo root):
+//   terraform/modules/platform-deploy-role/    — deploy role, permission boundary
+//   terraform/modules/platform-scp/            — SCP protecting deploy roles
+//   terraform/modules/platform-token-service-irsa/ — Token Service IRSA permissions
+//   infrastructure/platform/token-service/     — K8s RBAC, deployment manifests
+//
+// Triggered by changes to the platform repo (git@git.tuxgrid.com:admin/talos-argocd-proxmox.git).
+// Runs on platform-scanner infrastructure — same pod template as PlatformScanPipeline.
+
+pipeline {
+    agent {
+        kubernetes {
+            cloud 'kubernetes'
+            inheritFrom 'platform-scanner'
+        }
+    }
+
+    options {
+        timeout(time: 20, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '50'))
+    }
+
+    parameters {
+        string(name: 'GIT_URL',    defaultValue: 'git@git.tuxgrid.com:admin/talos-argocd-proxmox.git',
+               description: 'Platform infrastructure repo')
+        string(name: 'GIT_COMMIT', defaultValue: 'HEAD',
+               description: 'Commit SHA or branch ref to scan')
+    }
+
+    stages {
+        stage('Fetch') {
+            steps {
+                script {
+                    sh """
+                        git clone --depth 1 '${params.GIT_URL}' platform-src
+                        cd platform-src && git checkout '${params.GIT_COMMIT}'
+                    """
+                }
+            }
+        }
+
+        stage('Trivy') {
+            steps {
+                script {
+                    env.TRIVY_MISCONFIG_CRITICAL = '0'
+                    env.TRIVY_MISCONFIG_HIGH     = '0'
+                    env.TRIVY_SECRETS            = '0'
+
+                    container('trivy') {
+                        def exitCode = sh(
+                            script: """
+                                trivy fs \
+                                    --exit-code 1 \
+                                    --severity HIGH,CRITICAL \
+                                    --scanners misconfig,secret \
+                                    --no-progress \
+                                    --format json \
+                                    --output trivy-result.json \
+                                    platform-src/terraform/modules/platform-deploy-role \
+                                    platform-src/terraform/modules/platform-scp \
+                                    platform-src/terraform/modules/platform-token-service-irsa \
+                                    platform-src/infrastructure/platform/token-service
+                            """,
+                            returnStatus: true
+                        )
+
+                        if (fileExists('trivy-result.json')) {
+                            def result = readJSON(file: 'trivy-result.json')
+                            result.Results?.each { r ->
+                                r.Misconfigurations?.each { m ->
+                                    if (m.Severity == 'CRITICAL') env.TRIVY_MISCONFIG_CRITICAL = (env.TRIVY_MISCONFIG_CRITICAL.toInteger() + 1).toString()
+                                    if (m.Severity == 'HIGH')     env.TRIVY_MISCONFIG_HIGH     = (env.TRIVY_MISCONFIG_HIGH.toInteger()     + 1).toString()
+                                }
+                                r.Secrets?.each { env.TRIVY_SECRETS = (env.TRIVY_SECRETS.toInteger() + 1).toString() }
+                            }
+                        }
+
+                        echo "Trivy: MisconfigCRITICAL=${env.TRIVY_MISCONFIG_CRITICAL}, MisconfigHIGH=${env.TRIVY_MISCONFIG_HIGH}, Secrets=${env.TRIVY_SECRETS}"
+
+                        if (exitCode != 0) {
+                            error("Trivy found HIGH/CRITICAL findings in platform policy code: ${env.TRIVY_MISCONFIG_CRITICAL} critical, ${env.TRIVY_MISCONFIG_HIGH} high misconfigs, ${env.TRIVY_SECRETS} secrets")
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Checkov') {
+            steps {
+                script {
+                    env.CHECKOV_FAILED       = '0'
+                    env.CHECKOV_PASSED       = '0'
+                    env.CHECKOV_BY_FRAMEWORK = '{}'
+
+                    container('checkov') {
+                        // Terraform: IAM policy correctness, role trust conditions, SCP structure.
+                        // Kubernetes: RBAC least-privilege, securityContext, deployment hardening.
+                        // Secrets: committed credentials in policy files.
+                        //
+                        // Known false positives are suppressed with inline checkov:skip annotations
+                        // in the source files (e.g. the boundary policy's intentional Allow *).
+                        def exitCode = sh(
+                            script: """
+                                checkov \
+                                    -d platform-src/terraform/modules/platform-deploy-role \
+                                    -d platform-src/terraform/modules/platform-scp \
+                                    -d platform-src/terraform/modules/platform-token-service-irsa \
+                                    -d platform-src/infrastructure/platform/token-service \
+                                    --framework terraform,kubernetes,secrets \
+                                    --hard-fail-on HIGH,CRITICAL \
+                                    --compact \
+                                    --quiet \
+                                    --output json \
+                                    > checkov-result.json
+                            """,
+                            returnStatus: true
+                        )
+
+                        if (fileExists('checkov-result.json')) {
+                            def raw = readFile('checkov-result.json').trim()
+                            if (raw && (raw.startsWith('[') || raw.startsWith('{'))) {
+                                def parsed     = readJSON(text: raw)
+                                def allResults = parsed instanceof List ? parsed : [parsed]
+                                def totalFailed = 0
+                                def totalPassed = 0
+                                def byFramework = [:]
+
+                                allResults.each { r ->
+                                    def fw   = r.check_type ?: 'unknown'
+                                    def fail = (r.summary?.failed ?: 0) as int
+                                    def pass = (r.summary?.passed ?: 0) as int
+                                    totalFailed += fail
+                                    totalPassed += pass
+                                    byFramework[fw] = [passed: pass, failed: fail]
+                                }
+
+                                env.CHECKOV_FAILED       = totalFailed.toString()
+                                env.CHECKOV_PASSED       = totalPassed.toString()
+                                env.CHECKOV_BY_FRAMEWORK = groovy.json.JsonOutput.toJson(byFramework)
+
+                                echo "Checkov: ${totalPassed} passed, ${totalFailed} failed"
+                                byFramework.each { fw, counts ->
+                                    if (counts.failed > 0) echo "  ${fw}: ${counts.failed} failed, ${counts.passed} passed"
+                                }
+                            }
+                        }
+
+                        if (exitCode != 0) {
+                            error("Checkov found HIGH/CRITICAL failures in platform policy code: ${env.CHECKOV_FAILED} failed checks")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo "[Platform] Policy scan FAILED — platform infrastructure code has HIGH/CRITICAL security findings. Merge blocked."
+        }
+        success {
+            echo "[Platform] Policy scan passed — ${env.CHECKOV_PASSED} Checkov checks, 0 Trivy findings."
+        }
+    }
+}

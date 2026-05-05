@@ -42,6 +42,7 @@ pipeline {
 
                     allDsl << "folder('teams')    { description('Team workspaces') }\n\n"
                     allDsl << "folder('platform') { description('Platform-controlled CD pipelines — do not modify') }\n\n"
+                    allDsl << buildPlatformInfraDsl()
 
                     teamFiles.each { f ->
                         def team       = readYaml(file: f.path)
@@ -229,6 +230,44 @@ ${envLines}
 """
 }
 
+// Platform-wide jobs — created once, not per-team.
+def buildPlatformInfraDsl() {
+    return """
+pipelineJob('platform/policy-scan') {
+    displayName('policy-scan')
+    description('Scans platform IAM and Kubernetes policy code (deploy role boundary, SCP, IRSA, Token Service RBAC) with Trivy + Checkov. Trigger on commits to talos-argocd-proxmox.')
+    authorization {
+        blocksInheritance(true)
+        permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Cancel',    'admin')
+        permission('hudson.model.Item.Configure', 'admin')
+    }
+    parameters {
+        stringParam('GIT_URL',    'git@git.tuxgrid.com:admin/talos-argocd-proxmox.git', 'Platform infrastructure repo')
+        stringParam('GIT_COMMIT', 'HEAD', 'Commit SHA or branch ref to scan')
+    }
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('git@git.tuxgrid.com:admin/seed-jobs.git')
+                        credentials('git-deploy-key')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('pipelines/PlatformPolicyScanPipeline.groovy')
+        }
+    }
+    triggers { scm('H/5 * * * *') }
+    logRotator(-1, 50)
+}
+
+"""
+}
+
 def buildPlatformReleaseDsl(Map t, Map envVars) {
     def envLines = envVars.collect { k, v -> "        env('${k}', '${v}')" }.join('\n')
 
@@ -314,6 +353,43 @@ ${envLines}
                 }
             }
             scriptPath('pipelines/AttestBuildPipeline.groovy')
+        }
+    }
+    logRotator(-1, 50)
+}
+
+pipelineJob('platform/${t.slug}/scan') {
+    displayName('scan')
+    description('Platform-controlled scan job. Runs Trivy + Checkov on digest-pinned platform images, then signs scan/v1 attestation. Triggered by team builds via the shared library.')
+    authorization {
+        blocksInheritance(true)
+        ${teamReadBuild}
+        permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Cancel',    'admin')
+    }
+    parameters {
+        stringParam('UPSTREAM_JOB',   '', 'Full job path of the build that produced artifacts.json')
+        stringParam('UPSTREAM_BUILD', '', 'Build number')
+        stringParam('GIT_URL',        '', 'Repository URL for Checkov source scan')
+        stringParam('GIT_COMMIT',     '', 'Exact commit SHA to check out for Checkov')
+    }
+    environmentVariables {
+${envLines}
+    }
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('git@git.tuxgrid.com:admin/seed-jobs.git')
+                        credentials('git-deploy-key')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('pipelines/PlatformScanPipeline.groovy')
         }
     }
     logRotator(-1, 50)
