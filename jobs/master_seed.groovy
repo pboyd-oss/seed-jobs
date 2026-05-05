@@ -3,13 +3,6 @@
 
 folder('seed') {
     description('Platform seed jobs — admin access only')
-    authorization {
-        permission('hudson.model.Hudson.Read',      'admin')
-        permission('hudson.model.Item.Read',        'admin')
-        permission('hudson.model.Item.Build',       'admin')
-        permission('hudson.model.Item.Configure',   'admin')
-        permission('hudson.model.Item.Cancel',      'admin')
-    }
 }
 
 pipelineJob('seed/master-seed') {
