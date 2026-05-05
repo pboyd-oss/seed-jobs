@@ -40,17 +40,17 @@ pipeline {
                     def teamFiles = findFiles(glob: 'teams/*.yml')
                     def allDsl    = new StringBuilder()
 
-                    allDsl << "folder('teams')    { description('Team workspaces') }\n\n"
-                    allDsl << "folder('platform') { description('Platform-controlled CD pipelines — do not modify') }\n\n"
-                    allDsl << buildPlatformInfraDsl()
+                    allDsl.append("folder('teams')    { description('Team workspaces') }\n\n")
+                    allDsl.append("folder('platform') { description('Platform-controlled CD pipelines — do not modify') }\n\n")
+                    allDsl.append(buildPlatformInfraDsl())
 
                     teamFiles.each { f ->
                         def team       = readYaml(file: f.path)
                         def t          = team.team
                         def buildCloud = clouds.clouds.find { it.name == t.build_cloud }
                         def envVars    = buildEnvVars(t, buildCloud)
-                        allDsl << buildTeamDsl(t, envVars)
-                        allDsl << buildPlatformReleaseDsl(t, envVars)
+                        allDsl.append(buildTeamDsl(t, envVars))
+                        allDsl.append(buildPlatformReleaseDsl(t, envVars))
                     }
 
                     jobDsl(
@@ -123,7 +123,7 @@ def buildEnvVars(Map t, Map buildCloud) {
 def buildTeamDsl(Map t, Map envVars) {
     def dsl = new StringBuilder()
 
-    dsl << """
+    dsl.append("""
 folder('teams/${t.slug}') {
     displayName('${t.name}')
     description('Build cloud: ${t.build_cloud}')
@@ -140,12 +140,12 @@ folder('teams/${t.slug}') {
     }
 }
 
-"""
+""")
     t.repositories.each { repo ->
-        dsl << "folder('teams/${t.slug}/${repo.name}') { displayName('${repo.name}') }\n\n"
+        dsl.append("folder('teams/${t.slug}/${repo.name}') { displayName('${repo.name}') }\n\n")
         repo.jobs.each { job ->
             def jobPath = "teams/${t.slug}/${repo.name}/${job.name}"
-            dsl << (job.type == 'multibranch' ? multibranchBlock(jobPath, repo, job) : pipelineBlock(jobPath, repo, job, envVars))
+            dsl.append(job.type == 'multibranch' ? multibranchBlock(jobPath, repo, job) : pipelineBlock(jobPath, repo, job, envVars))
         }
     }
 
