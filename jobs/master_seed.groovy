@@ -4,7 +4,6 @@
 folder('seed') {
     description('Platform seed jobs — admin access only')
     authorization {
-        blocksInheritance(true)
         permission('hudson.model.Hudson.Read',      'admin')
         permission('hudson.model.Item.Read',        'admin')
         permission('hudson.model.Item.Build',       'admin')
