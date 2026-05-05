@@ -157,6 +157,62 @@ pipeline {
                 }
             }
         }
+
+        stage('tfsec') {
+            steps {
+                script {
+                    env.TFSEC_FAILED = '0'
+
+                    container('tfsec') {
+                        def exitCode = sh(
+                            script: """
+                                tfsec platform-src/terraform/modules \
+                                    --minimum-severity HIGH \
+                                    --format json \
+                                    --out tfsec-result.json \
+                                    --no-color
+                            """,
+                            returnStatus: true
+                        )
+
+                        if (fileExists('tfsec-result.json')) {
+                            def result = readJSON(file: 'tfsec-result.json')
+                            env.TFSEC_FAILED = (result.results?.size() ?: 0).toString()
+                            echo "tfsec: ${env.TFSEC_FAILED} HIGH/CRITICAL finding(s)"
+                        }
+
+                        if (exitCode != 0) {
+                            error("tfsec found HIGH/CRITICAL issues in Terraform modules: ${env.TFSEC_FAILED} finding(s)")
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Infracost') {
+            steps {
+                script {
+                    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                        withCredentials([string(credentialsId: 'infracost-api-key', variable: 'INFRACOST_API_KEY')]) {
+                            container('infracost') {
+                                sh """
+                                    infracost breakdown \
+                                        --path platform-src/terraform/modules \
+                                        --format json \
+                                        --out-file infracost-result.json
+                                """
+
+                                if (fileExists('infracost-result.json')) {
+                                    def result    = readJSON(file: 'infracost-result.json')
+                                    def totalCost = result.totalMonthlyCost ?: '0'
+                                    echo "Infracost: estimated monthly cost \$${totalCost}"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     post {
@@ -164,7 +220,7 @@ pipeline {
             echo "[Platform] Policy scan FAILED — platform infrastructure code has HIGH/CRITICAL security findings. Merge blocked."
         }
         success {
-            echo "[Platform] Policy scan passed — ${env.CHECKOV_PASSED} Checkov checks, 0 Trivy findings."
+            echo "[Platform] Policy scan passed — ${env.CHECKOV_PASSED} Checkov checks, 0 Trivy findings, 0 tfsec findings."
         }
     }
 }
