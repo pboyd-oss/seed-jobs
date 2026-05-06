@@ -232,6 +232,38 @@ ${envLines}
 // Platform-wide jobs — created once, not per-team.
 def buildPlatformInfraDsl() {
     return """
+folder('platform/build-sec-base') {
+    displayName('build-sec-base')
+    description('Platform security build agent image pipeline')
+    authorization {
+        permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Cancel',    'admin')
+        permission('hudson.model.Item.Configure', 'admin')
+    }
+}
+
+pipelineJob('platform/build-sec-base/build') {
+    displayName('build')
+    description('Builds and pushes harbor.tuxgrid.com/platform/build-sec-base using kaniko.')
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://github.com/pboyd-oss/build-sec-base.git')
+                        credentials('git-deploy-key')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('Jenkinsfile')
+        }
+    }
+    triggers { scm('H/5 * * * *') }
+    logRotator(-1, 20)
+}
+
 pipelineJob('platform/policy-scan') {
     displayName('policy-scan')
     description('Scans platform IAM and Kubernetes policy code (deploy role boundary, SCP, IRSA, Token Service RBAC) with Trivy + Checkov. Trigger on commits to talos-argocd-proxmox.')
