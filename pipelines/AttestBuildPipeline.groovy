@@ -10,6 +10,13 @@
 //   build/v1    — proves the image came from a successful Jenkins build
 //   pipeline/v1 — proves which stages ran and which platform standards were verified
 
+@NonCPS
+def getBuild(String jobName, int buildNum) {
+    def job = Jenkins.get().getItemByFullName(jobName)
+    if (!job) return null
+    return job.getBuildByNumber(buildNum)
+}
+
 pipeline {
     agent {
         kubernetes {
@@ -39,10 +46,7 @@ pipeline {
             steps {
                 script {
                     def buildNum = params.UPSTREAM_BUILD.toInteger()
-                    def job      = Jenkins.get().getItemByFullName(params.UPSTREAM_JOB)
-                    if (!job) error("Job not found: ${params.UPSTREAM_JOB}")
-
-                    def build = job.getBuildByNumber(buildNum)
+                    def build    = getBuild(params.UPSTREAM_JOB, buildNum)
                     if (!build) error("Build #${buildNum} not found in ${params.UPSTREAM_JOB}")
                     if (build.result != hudson.model.Result.SUCCESS) {
                         error("Build #${buildNum} result is ${build.result} — attestation refused")
