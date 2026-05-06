@@ -8,7 +8,7 @@
 //   terraform/modules/platform-token-service-irsa/ — Token Service IRSA permissions
 //   infrastructure/platform/token-service/     — K8s RBAC, deployment manifests
 //
-// Triggered by changes to the platform repo (git@git.tuxgrid.com:admin/talos-argocd-proxmox.git).
+// Triggered by changes to the platform repo (https://github.com/pboyd-oss/talos-argocd-proxmox.git).
 // Runs on platform-scanner infrastructure — same pod template as PlatformScanPipeline.
 
 pipeline {
@@ -26,7 +26,7 @@ pipeline {
     }
 
     parameters {
-        string(name: 'GIT_URL',    defaultValue: 'git@git.tuxgrid.com:admin/talos-argocd-proxmox.git',
+        string(name: 'GIT_URL',    defaultValue: 'https://github.com/pboyd-oss/talos-argocd-proxmox.git',
                description: 'Platform infrastructure repo')
         string(name: 'GIT_COMMIT', defaultValue: 'HEAD',
                description: 'Commit SHA or branch ref to scan')
