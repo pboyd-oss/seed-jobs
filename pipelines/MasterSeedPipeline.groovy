@@ -128,7 +128,6 @@ folder('teams/${t.slug}') {
     displayName('${t.name}')
     description('Build cloud: ${t.build_cloud}')
     authorization {
-        blocksInheritance()
         ${permissionsBlock(t.members)}
     }
     properties {
@@ -237,7 +236,6 @@ pipelineJob('platform/policy-scan') {
     displayName('policy-scan')
     description('Scans platform IAM and Kubernetes policy code (deploy role boundary, SCP, IRSA, Token Service RBAC) with Trivy + Checkov. Trigger on commits to talos-argocd-proxmox.')
     authorization {
-        blocksInheritance()
         permission('hudson.model.Item.Read',      'admin')
         permission('hudson.model.Item.Build',     'admin')
         permission('hudson.model.Item.Cancel',    'admin')
@@ -287,7 +285,6 @@ def buildPlatformReleaseDsl(Map t, Map envVars) {
 folder('platform/${t.slug}') {
     displayName('${t.name}')
     authorization {
-        blocksInheritance()
         ${teamReadBuild}
         permission('hudson.model.Item.Configure', 'admin')
         permission('hudson.model.Item.Read',      'admin')
@@ -327,7 +324,6 @@ pipelineJob('platform/${t.slug}/attest') {
     displayName('attest')
     description('Triggered by RunListener only. Creates cosign attestations after verified build.')
     authorization {
-        blocksInheritance()
         ${teamReadOnly}
         permission('hudson.model.Item.Configure', 'admin')
         permission('hudson.model.Item.Read',      'admin')
@@ -362,7 +358,6 @@ pipelineJob('platform/${t.slug}/scan') {
     displayName('scan')
     description('Platform-controlled scan job. Runs Trivy + Checkov on digest-pinned platform images, then signs scan/v1 attestation. Triggered by team builds via the shared library.')
     authorization {
-        blocksInheritance()
         ${teamReadBuild}
         permission('hudson.model.Item.Configure', 'admin')
         permission('hudson.model.Item.Read',      'admin')
