@@ -11,7 +11,7 @@ team:
 
   repositories:
     - name: auth-api
-      url: git@git.tuxgrid.com:team-a/auth-api.git
+      url: https://github.com/pboyd-oss/auth-api.git
       jobs:
         - name: build
           type: multibranch
@@ -22,7 +22,7 @@ team:
           jenkinsfile: Jenkinsfile.release
 
     - name: data-api
-      url: git@git.tuxgrid.com:team-a/data-api.git
+      url: https://github.com/pboyd-oss/data-api.git
       jobs:
         - name: build
           type: multibranch
