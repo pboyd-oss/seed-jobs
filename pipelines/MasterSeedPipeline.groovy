@@ -251,7 +251,7 @@ pipelineJob('platform/build-sec-base/build') {
             scm {
                 git {
                     remote {
-                        url('https://github.com/pboyd-oss/build-sec-base.git')
+                        url('git@github.com:pboyd-oss/build-sec-base.git')
                         credentials('git-deploy-key')
                     }
                     branch('main')
