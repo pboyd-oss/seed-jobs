@@ -242,7 +242,7 @@ pipelineJob('platform/policy-scan') {
         permission('hudson.model.Item.Configure', 'admin')
     }
     parameters {
-        stringParam('GIT_URL',    'git@git.tuxgrid.com:admin/talos-argocd-proxmox.git', 'Platform infrastructure repo')
+        stringParam('GIT_URL',    'https://github.com/pboyd-oss/talos-argocd-proxmox.git', 'Platform infrastructure repo')
         stringParam('GIT_COMMIT', 'HEAD', 'Commit SHA or branch ref to scan')
     }
     definition {
@@ -250,7 +250,7 @@ pipelineJob('platform/policy-scan') {
             scm {
                 git {
                     remote {
-                        url('git@git.tuxgrid.com:admin/seed-jobs.git')
+                        url('https://github.com/pboyd-oss/seed-jobs.git')
                         credentials('git-deploy-key')
                     }
                     branch('main')
@@ -308,7 +308,7 @@ ${envLines}
             scm {
                 git {
                     remote {
-                        url('git@git.tuxgrid.com:admin/seed-jobs.git')
+                        url('https://github.com/pboyd-oss/seed-jobs.git')
                         credentials('git-deploy-key')
                     }
                     branch('main')
@@ -342,7 +342,7 @@ ${envLines}
             scm {
                 git {
                     remote {
-                        url('git@git.tuxgrid.com:admin/seed-jobs.git')
+                        url('https://github.com/pboyd-oss/seed-jobs.git')
                         credentials('git-deploy-key')
                     }
                     branch('main')
@@ -378,7 +378,7 @@ ${envLines}
             scm {
                 git {
                     remote {
-                        url('git@git.tuxgrid.com:admin/seed-jobs.git')
+                        url('https://github.com/pboyd-oss/seed-jobs.git')
                         credentials('git-deploy-key')
                     }
                     branch('main')
