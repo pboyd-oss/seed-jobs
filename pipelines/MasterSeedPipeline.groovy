@@ -141,7 +141,18 @@ folder('teams/${t.slug}') {
 
 """)
     t.repositories.each { repo ->
-        dsl.append("folder('teams/${t.slug}/${repo.name}') { displayName('${repo.name}') }\n\n")
+        def repoFolderExtra = ''
+        if (repo.containsKey('coverage_threshold')) {
+            repoFolderExtra = """
+    properties {
+        folderProperties {
+            properties {
+                stringProperty { key('TUXGRID_COVERAGE_THRESHOLD'); value('${repo.coverage_threshold}') }
+            }
+        }
+    }"""
+        }
+        dsl.append("folder('teams/${t.slug}/${repo.name}') { displayName('${repo.name}')${repoFolderExtra} }\n\n")
         repo.jobs.each { job ->
             def jobPath = "teams/${t.slug}/${repo.name}/${job.name}"
             dsl.append(job.type == 'multibranch' ? multibranchBlock(jobPath, repo, job) : pipelineBlock(jobPath, repo, job, envVars))

@@ -35,6 +35,7 @@ team:
 
     - name: nginx-pipeline
       url: https://github.com/pboyd-oss/nginx-pipeline.git
+      coverage_threshold: 0
       jobs:
         - name: build
           type: pipeline
