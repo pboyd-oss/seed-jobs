@@ -264,6 +264,99 @@ pipelineJob('platform/build-sec-base/build') {
     logRotator(-1, 20)
 }
 
+folder('platform/audit-service') {
+    displayName('audit-service')
+    description('Platform audit service — build pipeline security event correlation')
+    authorization {
+        permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Cancel',    'admin')
+        permission('hudson.model.Item.Configure', 'admin')
+    }
+}
+
+pipelineJob('platform/audit-service/build') {
+    displayName('build')
+    description('Builds and pushes harbor.tuxgrid.com/platform/audit-service using kaniko.')
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://github.com/pboyd-oss/platform-audit-service.git')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('Jenkinsfile')
+        }
+    }
+    triggers { scm('H/5 * * * *') }
+    logRotator(-1, 20)
+}
+
+folder('platform/tetragon-forwarder') {
+    displayName('tetragon-forwarder')
+    description('Platform Tetragon forwarder — forwards kernel exec/network events to audit service')
+    authorization {
+        permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Cancel',    'admin')
+        permission('hudson.model.Item.Configure', 'admin')
+    }
+}
+
+pipelineJob('platform/tetragon-forwarder/build') {
+    displayName('build')
+    description('Builds and pushes harbor.tuxgrid.com/platform/tetragon-forwarder using kaniko.')
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://github.com/pboyd-oss/platform-tetragon-forwarder.git')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('Jenkinsfile')
+        }
+    }
+    triggers { scm('H/5 * * * *') }
+    logRotator(-1, 20)
+}
+
+folder('platform/token-service') {
+    displayName('token-service')
+    description('Platform token service — OIDC-gated STS credential vending')
+    authorization {
+        permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Cancel',    'admin')
+        permission('hudson.model.Item.Configure', 'admin')
+    }
+}
+
+pipelineJob('platform/token-service/build') {
+    displayName('build')
+    description('Builds and pushes harbor.tuxgrid.com/platform/token-service using kaniko.')
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://github.com/pboyd-oss/platform-token-service.git')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('Jenkinsfile')
+        }
+    }
+    triggers { scm('H/5 * * * *') }
+    logRotator(-1, 20)
+}
+
 pipelineJob('platform/policy-scan') {
     displayName('policy-scan')
     description('Scans platform IAM and Kubernetes policy code (deploy role boundary, SCP, IRSA, Token Service RBAC) with Trivy + Checkov. Trigger on commits to talos-argocd-proxmox.')
@@ -363,8 +456,17 @@ pipelineJob('platform/${t.slug}/attest') {
         permission('hudson.model.Item.Cancel',    'admin')
     }
     parameters {
-        stringParam('UPSTREAM_JOB',   '', 'Full job path of the completed build')
-        stringParam('UPSTREAM_BUILD', '', 'Build number')
+        stringParam('UPSTREAM_JOB',              '', 'Full job path of the completed build')
+        stringParam('UPSTREAM_BUILD',            '', 'Build number')
+        stringParam('PLATFORM_AUDIT_ID',         '', 'Correlation ID from GraphListener')
+        stringParam('PLATFORM_AUDIT_LOG_REF',    '', 'URL to audit-log.json artifact')
+        stringParam('PLATFORM_TESTS_COUNT',      '0', '')
+        stringParam('PLATFORM_TESTS_FAILURES',   '0', '')
+        stringParam('PLATFORM_COVERAGE_PCT',     '0', '')
+        stringParam('PLATFORM_COVERAGE_THRESH',  '0', '')
+        stringParam('PLATFORM_SCAN_JOB_REF',     '', '')
+        stringParam('PLATFORM_STAGES_JSON',      '[]', '')
+        stringParam('PLATFORM_LIBRARIES_JSON',   '[]', '')
     }
     environmentVariables {
 ${envLines}

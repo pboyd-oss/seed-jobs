@@ -38,7 +38,9 @@ pipeline {
         string(name: 'PLATFORM_COVERAGE_THRESH', defaultValue: '0')
         string(name: 'PLATFORM_SCAN_JOB_REF',    defaultValue: '')
         string(name: 'PLATFORM_STAGES_JSON',     defaultValue: '[]')
-        string(name: 'PLATFORM_LIBRARY_SHA',     defaultValue: 'unknown')
+        string(name: 'PLATFORM_LIBRARIES_JSON',  defaultValue: '[]')
+        string(name: 'PLATFORM_AUDIT_ID',        defaultValue: '')
+        string(name: 'PLATFORM_AUDIT_LOG_REF',   defaultValue: '')
     }
 
     stages {
@@ -142,9 +144,10 @@ pipeline {
                         job:       params.UPSTREAM_JOB,
                         build:     params.UPSTREAM_BUILD,
                         timestamp: timestamp,
-                        library: [
-                            name: 'jenkins-library',
-                            sha:  params.PLATFORM_LIBRARY_SHA,
+                        libraries: readJSON(text: params.PLATFORM_LIBRARIES_JSON),
+                        audit: [
+                            audit_id:      params.PLATFORM_AUDIT_ID,
+                            audit_log_ref: params.PLATFORM_AUDIT_LOG_REF,
                         ],
                         platform_verified: [
                             tests_passed:               params.PLATFORM_TESTS_FAILURES.toInteger() == 0,
