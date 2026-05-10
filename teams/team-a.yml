@@ -33,6 +33,22 @@ team:
           jenkinsfile: Jenkinsfile.cleanup
           cron: "H 2 * * *"
 
+    - name: nginx-pipeline
+      url: https://github.com/pboyd-oss/nginx-pipeline.git
+      jobs:
+        - name: build
+          type: pipeline
+          branch: main
+          jenkinsfile: Jenkinsfile
+
+    - name: microservice-pipeline
+      url: https://github.com/pboyd-oss/microservice-pipeline.git
+      jobs:
+        - name: build
+          type: pipeline
+          branch: main
+          jenkinsfile: Jenkinsfile
+
   environments:
     - name: dev
       cloud: build-shared
