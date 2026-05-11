@@ -681,6 +681,7 @@ pipelineJob('platform/${t.slug}/scan') {
         stringParam('UPSTREAM_BUILD', '', 'Build number')
         stringParam('GIT_URL',        '', 'Repository URL for Checkov source scan')
         stringParam('GIT_COMMIT',     '', 'Exact commit SHA to check out for Checkov')
+        stringParam('ENVIRONMENT',    '', 'Target environment for render + plan (optional)')
     }
     environmentVariables {
 ${envLines}

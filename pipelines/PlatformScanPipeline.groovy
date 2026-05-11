@@ -1,21 +1,22 @@
 // Platform-controlled scan pipeline.
-// Four gates must all pass before a scan/v1 attestation is created:
+// Gates that must pass before a scan/v1 attestation is created:
 //
-//   1. Trivy Image — container vulnerability + secret scanning per image in artifacts.json
-//                    (--scanners vuln,secret --ignore-unfixed --severity HIGH,CRITICAL)
-//   2. Trivy Repo  — IaC misconfiguration + secret scanning of the source repository
-//                    (trivy fs --scanners misconfig,secret --severity HIGH,CRITICAL)
-//   3. Checkov     — IaC policy checks across terraform, dockerfile, kubernetes,
-//                    helm, kustomize, github_actions, and secrets frameworks
-//   4. SBOM        — SPDX-JSON Software Bill of Materials attested separately as
-//                    https://spdx.dev/Document for each image (informational, not a pass/fail gate)
+//   1. Verify        — cosign signature verification (gate — aborts if image is unsigned)
+//   2. Trivy Image   — container vulnerability + secret scanning per image in artifacts.json
+//   3. Trivy Repo    — IaC misconfiguration + secret scanning of the source repository
+//   4. Checkov       — IaC policy checks (terraform, dockerfile, kubernetes, helm, kustomize, github_actions, secrets)
+//   5. Render        — skaffold render for ENVIRONMENT (kubernetes envs only; skipped if ENVIRONMENT empty)
+//   6. Checkov Rendered — Checkov on the rendered manifest (skipped if no rendered.yaml)
+//   7. Terraform Plan — terraform plan for ENVIRONMENT (aws envs only; skipped if no .tf files)
+//   8. Checkov Plan  — Checkov on tfplan.json (skipped if no plan)
+//   9. Push Artifacts — sha256 + cosign upload blob for rendered.yaml + tfplan.json to Harbor
+//  10. SBOM          — SPDX-JSON per image (informational, not a gate)
 //
-// Triggered by microservicePipeline() — runs on platform infrastructure,
-// NOT the team's build cloud. Teams cannot forge the scan/v1 attestation:
-// they do not hold the cosign-key credential.
+// ENVIRONMENT is optional. Without it, steps 5–9 are skipped and the predicate
+// records empty render/plan fields. The build listener triggers this without
+// ENVIRONMENT; the release pipeline triggers it with ENVIRONMENT set.
 //
-// The source repo is cloned once in Fetch and reused by both Trivy Repo and
-// Checkov, avoiding a double clone.
+// The source repo is cloned once in Fetch and reused by Trivy Repo, Checkov, and Render.
 
 pipeline {
     agent {
@@ -26,7 +27,7 @@ pipeline {
     }
 
     options {
-        timeout(time: 30, unit: 'MINUTES')
+        timeout(time: 45, unit: 'MINUTES')
         disableConcurrentBuilds()
     }
 
@@ -35,6 +36,7 @@ pipeline {
         string(name: 'UPSTREAM_BUILD', description: 'Build number')
         string(name: 'GIT_URL',        description: 'Repository URL for source/IaC scanning')
         string(name: 'GIT_COMMIT',     description: 'Exact commit SHA to scan')
+        string(name: 'ENVIRONMENT',    defaultValue: '', description: 'Target environment for render + plan (optional — skips steps 5–9 if empty)')
     }
 
     stages {
@@ -61,6 +63,37 @@ pipeline {
                             cd scan-src && git checkout "$GIT_REPO_SHA"
                         '''
                     }
+                }
+            }
+        }
+
+        stage('Verify') {
+            steps {
+                script {
+                    def images = readJSON(file: 'artifacts.json').builds
+
+                    withCredentials([
+                        string(credentialsId: 'cosign-public-key', variable: 'COSIGN_PUBLIC_KEY'),
+                        usernamePassword(credentialsId: 'harbor-robot-platform',
+                                         usernameVariable: 'HARBOR_USER', passwordVariable: 'HARBOR_PASS'),
+                    ]) {
+                        container('deploy-sec-base') {
+                            sh '''
+                                printf '%s' "$COSIGN_PUBLIC_KEY" > /tmp/cosign.pub
+                                AUTH=$(printf '%s:%s' "$HARBOR_USER" "$HARBOR_PASS" | base64 | tr -d '\\n')
+                                mkdir -p ~/.docker
+                                printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > ~/.docker/config.json
+                            '''
+                            images.each { image ->
+                                withEnv(["IMAGE_REF=${image.tag}"]) {
+                                    sh 'cosign verify --key /tmp/cosign.pub "$IMAGE_REF"'
+                                }
+                            }
+                            sh 'rm -f /tmp/cosign.pub ~/.docker/config.json'
+                        }
+                    }
+
+                    echo "Signature verified for ${images.size()} image(s)"
                 }
             }
         }
@@ -236,6 +269,279 @@ pipeline {
             }
         }
 
+        stage('Render') {
+            when { expression { return params.ENVIRONMENT?.trim() } }
+            steps {
+                script {
+                    env.RENDERED_MANIFEST_SHA256 = ''
+                    env.RENDERED_OCI_REF         = ''
+
+                    def envType = env["TUXGRID_ENV_${params.ENVIRONMENT.toUpperCase()}_TYPE"] ?: 'kubernetes'
+                    if (envType == 'aws') {
+                        echo "Environment '${params.ENVIRONMENT}' is type 'aws' — skipping render (terraform plan handles IaC)"
+                        return
+                    }
+
+                    def hasSkaffold = fileExists('scan-src/skaffold.yaml') || fileExists('scan-src/skaffold.yml')
+                    if (!hasSkaffold) {
+                        echo "No skaffold.yaml found in source — skipping render"
+                        return
+                    }
+
+                    container('deploy-sec-base') {
+                        withEnv(["DEPLOY_ENV=${params.ENVIRONMENT}"]) {
+                            sh '''
+                                cd scan-src
+                                skaffold render \
+                                    --profile="$DEPLOY_ENV" \
+                                    --build-artifacts=../artifacts.json \
+                                    --output=../rendered.yaml
+                            '''
+                        }
+                    }
+
+                    if (fileExists('rendered.yaml')) {
+                        env.RENDERED_MANIFEST_SHA256 = sh(
+                            script: "sha256sum rendered.yaml | awk '{print \$1}'",
+                            returnStdout: true
+                        ).trim()
+                        echo "Rendered manifest SHA-256: ${env.RENDERED_MANIFEST_SHA256}"
+                    }
+                }
+            }
+        }
+
+        stage('Checkov Rendered') {
+            when { expression { return fileExists('rendered.yaml') } }
+            steps {
+                script {
+                    env.CHECKOV_RENDERED_FAILED = '0'
+                    env.CHECKOV_RENDERED_PASSED = '0'
+
+                    container('deploy-sec-base') {
+                        def exitCode = sh(
+                            script: '''
+                                checkov -f rendered.yaml \
+                                    --framework kubernetes \
+                                    --hard-fail-on HIGH,CRITICAL \
+                                    --compact \
+                                    --quiet \
+                                    --output json \
+                                    > checkov-rendered-result.json
+                            ''',
+                            returnStatus: true
+                        )
+
+                        if (fileExists('checkov-rendered-result.json')) {
+                            def raw = readFile('checkov-rendered-result.json').trim()
+                            if (raw && (raw.startsWith('[') || raw.startsWith('{'))) {
+                                def parsed     = readJSON(text: raw)
+                                def allResults = parsed instanceof List ? parsed : [parsed]
+                                def totalFailed = 0
+                                def totalPassed = 0
+                                allResults.each { r ->
+                                    totalFailed += (r.summary?.failed ?: 0) as int
+                                    totalPassed += (r.summary?.passed ?: 0) as int
+                                }
+                                env.CHECKOV_RENDERED_FAILED = totalFailed.toString()
+                                env.CHECKOV_RENDERED_PASSED = totalPassed.toString()
+                                echo "Checkov Rendered: ${totalPassed} passed, ${totalFailed} failed"
+                            }
+                        }
+
+                        if (exitCode != 0) {
+                            error("Checkov found HIGH/CRITICAL failures in rendered manifest: ${env.CHECKOV_RENDERED_FAILED} failed checks")
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Terraform Plan') {
+            when { expression { return params.ENVIRONMENT?.trim() } }
+            steps {
+                script {
+                    env.TFPLAN_SHA256  = ''
+                    env.TFPLAN_OCI_REF = ''
+                    env.CHECKOV_PLAN_FAILED = '0'
+                    env.CHECKOV_PLAN_PASSED = '0'
+
+                    def envType = env["TUXGRID_ENV_${params.ENVIRONMENT.toUpperCase()}_TYPE"] ?: 'kubernetes'
+                    if (envType != 'aws') {
+                        echo "Environment '${params.ENVIRONMENT}' is type '${envType}' — skipping Terraform plan"
+                        return
+                    }
+
+                    def hasTf = sh(
+                        script: 'find scan-src/ -maxdepth 4 -name "*.tf" | head -1',
+                        returnStdout: true
+                    ).trim()
+                    if (!hasTf) {
+                        echo "No .tf files found in source — skipping Terraform plan"
+                        return
+                    }
+
+                    def roleArn = env["TUXGRID_ENV_${params.ENVIRONMENT.toUpperCase()}_ROLE_ARN"]
+                    if (!roleArn) {
+                        echo "WARNING: no ROLE_ARN for environment '${params.ENVIRONMENT}' — skipping Terraform plan"
+                        return
+                    }
+
+                    def teamSlug = params.UPSTREAM_JOB.split('/')[1]
+                    def payload  = groovy.json.JsonOutput.toJson([
+                        image_ref:   readJSON(file: 'artifacts.json').builds[0].tag,
+                        environment: params.ENVIRONMENT,
+                        role_arn:    roleArn,
+                    ])
+
+                    def credsJson
+                    container('awscli') {
+                        withEnv(["TOKEN_PAYLOAD=${payload}"]) {
+                            credsJson = sh(
+                                script: '''
+                                    curl -sf -X POST https://token-service.platform.svc.cluster.local/token \
+                                        -H "Authorization: Bearer $(cat /run/secrets/oidc/token)" \
+                                        -H "X-K8s-Token: $(cat /run/secrets/kubernetes/token)" \
+                                        -H 'Content-Type: application/json' \
+                                        -d "$TOKEN_PAYLOAD"
+                                ''',
+                                returnStdout: true
+                            ).trim()
+                        }
+                    }
+
+                    def creds = readJSON(text: credsJson)
+                    withEnv([
+                        "AWS_ACCESS_KEY_ID=${creds.AccessKeyId}",
+                        "AWS_SECRET_ACCESS_KEY=${creds.SecretAccessKey}",
+                        "AWS_SESSION_TOKEN=${creds.SessionToken}",
+                        "DEPLOY_ENV=${params.ENVIRONMENT}",
+                        "TEAM_SLUG=${teamSlug}",
+                    ]) {
+                        container('deploy-sec-base') {
+                            sh '''
+                                cd scan-src
+                                terraform init \
+                                    -backend-config="key=${TEAM_SLUG}/${DEPLOY_ENV}/terraform.tfstate"
+                                terraform plan \
+                                    -var-file=environments/${DEPLOY_ENV}.tfvars \
+                                    -out=../tfplan
+                                terraform show -json ../tfplan > ../tfplan.json
+                            '''
+                        }
+                    }
+
+                    if (fileExists('tfplan.json')) {
+                        env.TFPLAN_SHA256 = sh(
+                            script: "sha256sum tfplan.json | awk '{print \$1}'",
+                            returnStdout: true
+                        ).trim()
+                        echo "Terraform plan SHA-256: ${env.TFPLAN_SHA256}"
+                    }
+                }
+            }
+        }
+
+        stage('Checkov Plan') {
+            when { expression { return fileExists('tfplan.json') } }
+            steps {
+                script {
+                    container('deploy-sec-base') {
+                        def exitCode = sh(
+                            script: '''
+                                checkov -f tfplan.json \
+                                    --framework terraform_plan \
+                                    --hard-fail-on HIGH,CRITICAL \
+                                    --compact \
+                                    --quiet \
+                                    --output json \
+                                    > checkov-plan-result.json
+                            ''',
+                            returnStatus: true
+                        )
+
+                        if (fileExists('checkov-plan-result.json')) {
+                            def raw = readFile('checkov-plan-result.json').trim()
+                            if (raw && (raw.startsWith('[') || raw.startsWith('{'))) {
+                                def parsed     = readJSON(text: raw)
+                                def allResults = parsed instanceof List ? parsed : [parsed]
+                                def totalFailed = 0
+                                def totalPassed = 0
+                                allResults.each { r ->
+                                    totalFailed += (r.summary?.failed ?: 0) as int
+                                    totalPassed += (r.summary?.passed ?: 0) as int
+                                }
+                                env.CHECKOV_PLAN_FAILED = totalFailed.toString()
+                                env.CHECKOV_PLAN_PASSED = totalPassed.toString()
+                                echo "Checkov Plan: ${totalPassed} passed, ${totalFailed} failed"
+                            }
+                        }
+
+                        if (exitCode != 0) {
+                            error("Checkov found HIGH/CRITICAL failures in Terraform plan: ${env.CHECKOV_PLAN_FAILED} failed checks")
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Push Artifacts') {
+            when { expression { return params.ENVIRONMENT?.trim() && (fileExists('rendered.yaml') || fileExists('tfplan.json')) } }
+            steps {
+                script {
+                    def parts    = params.UPSTREAM_JOB.split('/')
+                    def teamSlug = parts[1]
+                    def repoName = parts[2]
+                    def gitShort = params.GIT_COMMIT.take(7)
+                    def envSlug  = params.ENVIRONMENT
+
+                    withCredentials([usernamePassword(
+                        credentialsId: 'harbor-robot-platform',
+                        usernameVariable: 'HARBOR_USER',
+                        passwordVariable: 'HARBOR_PASS',
+                    )]) {
+                        container('deploy-sec-base') {
+                            sh '''
+                                AUTH=$(printf '%s:%s' "$HARBOR_USER" "$HARBOR_PASS" | base64 | tr -d '\\n')
+                                mkdir -p ~/.docker
+                                printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > ~/.docker/config.json
+                            '''
+
+                            if (fileExists('rendered.yaml')) {
+                                def tag = "harbor.tuxgrid.com/platform/scan-artifacts:${teamSlug}-${repoName}-${gitShort}-${envSlug}-rendered"
+                                withEnv(["ARTIFACT_TAG=${tag}"]) {
+                                    sh '''
+                                        cosign upload blob \
+                                            -f rendered.yaml \
+                                            --ct 'application/vnd.tuxgrid.rendered-manifest.v1+yaml' \
+                                            "$ARTIFACT_TAG"
+                                    '''
+                                }
+                                env.RENDERED_OCI_REF = tag
+                                echo "Pushed rendered.yaml → ${tag}"
+                            }
+
+                            if (fileExists('tfplan.json')) {
+                                def tag = "harbor.tuxgrid.com/platform/scan-artifacts:${teamSlug}-${repoName}-${gitShort}-${envSlug}-tfplan"
+                                withEnv(["ARTIFACT_TAG=${tag}"]) {
+                                    sh '''
+                                        cosign upload blob \
+                                            -f tfplan.json \
+                                            --ct 'application/vnd.tuxgrid.terraform-plan.v1+json' \
+                                            "$ARTIFACT_TAG"
+                                    '''
+                                }
+                                env.TFPLAN_OCI_REF = tag
+                                echo "Pushed tfplan.json → ${tag}"
+                            }
+
+                            sh 'rm -f ~/.docker/config.json'
+                        }
+                    }
+                }
+            }
+        }
+
         stage('SBOM') {
             steps {
                 script {
@@ -300,11 +606,12 @@ pipeline {
                     def checkovImage = 'harbor.tuxgrid.com/platform/checkov:3.2.285'
 
                     writeJSON(file: 'predicate-scan.json', json: [
-                        job:        params.UPSTREAM_JOB,
-                        build:      params.UPSTREAM_BUILD,
-                        timestamp:  timestamp,
-                        git_url:    params.GIT_URL,
-                        git_commit: params.GIT_COMMIT,
+                        job:         params.UPSTREAM_JOB,
+                        build:       params.UPSTREAM_BUILD,
+                        timestamp:   timestamp,
+                        git_url:     params.GIT_URL,
+                        git_commit:  params.GIT_COMMIT,
+                        environment: params.ENVIRONMENT ?: '',
                         trivy_image: [
                             passed:         true,
                             critical:       env.TRIVY_IMG_CRITICAL.toInteger(),
@@ -329,6 +636,20 @@ pipeline {
                             frameworks:    ['terraform', 'dockerfile', 'kubernetes', 'helm', 'kustomize', 'github_actions', 'secrets'],
                             by_framework:  new groovy.json.JsonSlurper().parseText(env.CHECKOV_BY_FRAMEWORK),
                             scanner_image: checkovImage,
+                        ],
+                        render: [
+                            rendered_manifest_sha256: env.RENDERED_MANIFEST_SHA256 ?: '',
+                            rendered_manifest_ref:    env.RENDERED_OCI_REF ?: '',
+                            checkov_passed:  (env.CHECKOV_RENDERED_FAILED ?: '0').toInteger() == 0,
+                            checkov_failed:  (env.CHECKOV_RENDERED_FAILED ?: '0').toInteger(),
+                            checkov_passed_checks: (env.CHECKOV_RENDERED_PASSED ?: '0').toInteger(),
+                        ],
+                        plan: [
+                            terraform_plan_sha256: env.TFPLAN_SHA256 ?: '',
+                            terraform_plan_ref:    env.TFPLAN_OCI_REF ?: '',
+                            checkov_passed:  (env.CHECKOV_PLAN_FAILED ?: '0').toInteger() == 0,
+                            checkov_failed:  (env.CHECKOV_PLAN_FAILED ?: '0').toInteger(),
+                            checkov_passed_checks: (env.CHECKOV_PLAN_PASSED ?: '0').toInteger(),
                         ],
                         sbom: [
                             attested:      true,
