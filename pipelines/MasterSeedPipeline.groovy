@@ -414,7 +414,18 @@ pipelineJob('platform/bakery/deploy-sec-base/build') {
     logRotator(-1, 20)
 }
 
-folder('platform/audit-service') {
+folder('platform/services') {
+    displayName('services')
+    description('Platform service build jobs — audit-service, tetragon-forwarder, token-service.')
+    authorization {
+        permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Cancel',    'admin')
+        permission('hudson.model.Item.Configure', 'admin')
+    }
+}
+
+folder('platform/services/audit-service') {
     displayName('audit-service')
     description('Platform audit service — build pipeline security event correlation')
     authorization {
@@ -425,7 +436,7 @@ folder('platform/audit-service') {
     }
 }
 
-pipelineJob('platform/audit-service/build') {
+pipelineJob('platform/services/audit-service/build') {
     displayName('build')
     description('Builds and pushes harbor.tuxgrid.com/platform/audit-service using kaniko.')
     definition {
@@ -445,7 +456,7 @@ pipelineJob('platform/audit-service/build') {
     logRotator(-1, 20)
 }
 
-folder('platform/tetragon-forwarder') {
+folder('platform/services/tetragon-forwarder') {
     displayName('tetragon-forwarder')
     description('Platform Tetragon forwarder — forwards kernel exec/network events to audit service')
     authorization {
@@ -456,7 +467,7 @@ folder('platform/tetragon-forwarder') {
     }
 }
 
-pipelineJob('platform/tetragon-forwarder/build') {
+pipelineJob('platform/services/tetragon-forwarder/build') {
     displayName('build')
     description('Builds and pushes harbor.tuxgrid.com/platform/tetragon-forwarder using kaniko.')
     definition {
@@ -476,7 +487,7 @@ pipelineJob('platform/tetragon-forwarder/build') {
     logRotator(-1, 20)
 }
 
-folder('platform/token-service') {
+folder('platform/services/token-service') {
     displayName('token-service')
     description('Platform token service — OIDC-gated STS credential vending')
     authorization {
@@ -487,7 +498,7 @@ folder('platform/token-service') {
     }
 }
 
-pipelineJob('platform/token-service/build') {
+pipelineJob('platform/services/token-service/build') {
     displayName('build')
     description('Builds and pushes harbor.tuxgrid.com/platform/token-service using kaniko.')
     definition {
