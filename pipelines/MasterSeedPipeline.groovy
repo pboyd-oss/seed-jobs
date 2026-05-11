@@ -583,7 +583,8 @@ def buildPlatformReleaseDsl(Map t, Map envVars) {
         "permission('hudson.model.Item.Read', '${m.username}')"
     }.join('\n        ')
 
-    return """
+    def dsl = new StringBuilder()
+    dsl.append("""
 folder('platform/${t.slug}') {
     displayName('${t.name}')
     authorization {
@@ -701,5 +702,54 @@ ${envLines}
     logRotator(-1, 50)
 }
 
-"""
+""")
+
+    t.repositories.each { repo ->
+        def repoPath = "platform/${t.slug}/${repo.name}"
+        dsl.append("""
+folder('${repoPath}') {
+    displayName('${repo.name}')
+    authorization {
+        ${teamReadBuild}
+        permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Build',     'admin')
+    }
+}
+
+pipelineJob('${repoPath}/source-scan') {
+    displayName('source-scan')
+    description('Platform source scan for ${repo.name}. Runs tfsec, Checkov, and Trivy secrets at a pinned commit. Teams call this as a blocking step before building.')
+    authorization {
+        ${teamReadBuild}
+        permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Cancel',    'admin')
+    }
+    parameters {
+        stringParam('GIT_URL',    '${repo.url}', 'Repository URL to scan')
+        stringParam('GIT_COMMIT', '',            'Exact 40-char commit SHA to scan')
+    }
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://github.com/pboyd-oss/seed-jobs.git')
+                        credentials('git-deploy-key')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('pipelines/PlatformSourceScanPipeline.groovy')
+        }
+    }
+    logRotator(-1, 50)
+}
+
+""")
+    }
+
+    return dsl.toString()
 }
