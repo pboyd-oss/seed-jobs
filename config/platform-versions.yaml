@@ -1,0 +1,10 @@
+tools:
+  cosign:    "v2.5.2"
+  skaffold:  "v2.15.0"
+  terraform: "1.9.0"
+  trivy:     "0.60.0"
+  tfsec:     "v1.28.11"
+  checkov:   "3.2.285"
+  python:    "3.12-slim"
+  alpine:    "3.20"
+  kaniko:    "v1.23.2-debug"
