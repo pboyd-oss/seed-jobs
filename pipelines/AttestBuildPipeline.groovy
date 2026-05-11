@@ -21,7 +21,7 @@ pipeline {
     agent {
         kubernetes {
             cloud 'kubernetes'
-            inheritFrom 'build-sec-base'
+            inheritFrom 'deploy-sec-base'
         }
     }
 
@@ -105,7 +105,7 @@ pipeline {
                     if (!images) error('artifacts.json contains no builds')
 
                     withCredentials([string(credentialsId: 'cosign-key', variable: 'COSIGN_PRIVATE_KEY')]) {
-                        container('build-sec-base') {
+                        container('deploy-sec-base') {
                             sh "printf '%s' \"\$COSIGN_PRIVATE_KEY\" > /tmp/cosign.key && chmod 600 /tmp/cosign.key"
 
                             images.each { image ->
@@ -169,7 +169,7 @@ pipeline {
                     def images = readJSON(file: 'artifacts.json').builds
 
                     withCredentials([string(credentialsId: 'cosign-key', variable: 'COSIGN_PRIVATE_KEY')]) {
-                        container('build-sec-base') {
+                        container('deploy-sec-base') {
                             sh "printf '%s' \"\$COSIGN_PRIVATE_KEY\" > /tmp/cosign.key && chmod 600 /tmp/cosign.key"
 
                             images.each { image ->

@@ -245,7 +245,7 @@ def buildPlatformInfraDsl() {
     return """
 folder('platform/cosign') {
     displayName('cosign')
-    description('Alpine + cosign sidecar image — used by build-sec-base-builder pod template')
+    description('Alpine + cosign sidecar image — used by deploy-sec-base-builder pod template')
     authorization {
         permission('hudson.model.Item.Read',      'admin')
         permission('hudson.model.Item.Build',     'admin')
@@ -277,7 +277,7 @@ pipelineJob('platform/cosign/build') {
 
 folder('platform/base') {
     displayName('base')
-    description('Platform base image — ubuntu:24.04 + apt packages. Parent of build-sec-base.')
+    description('Platform base image — ubuntu:24.04 + apt packages. Parent of deploy-base.')
     authorization {
         permission('hudson.model.Item.Read',      'admin')
         permission('hudson.model.Item.Build',     'admin')
@@ -339,9 +339,9 @@ pipelineJob('platform/deploy-base/build') {
     logRotator(-1, 20)
 }
 
-folder('platform/build-sec-base') {
-    displayName('build-sec-base')
-    description('Platform security build agent image pipeline')
+folder('platform/deploy-sec-base') {
+    displayName('deploy-sec-base')
+    description('Platform deploy security image — trivy, tfsec, checkov on top of deploy-base.')
     authorization {
         permission('hudson.model.Item.Read',      'admin')
         permission('hudson.model.Item.Build',     'admin')
@@ -350,15 +350,15 @@ folder('platform/build-sec-base') {
     }
 }
 
-pipelineJob('platform/build-sec-base/build') {
+pipelineJob('platform/deploy-sec-base/build') {
     displayName('build')
-    description('Builds and pushes harbor.tuxgrid.com/platform/build-sec-base using kaniko.')
+    description('Builds and pushes harbor.tuxgrid.com/platform/deploy-sec-base using kaniko.')
     definition {
         cpsScm {
             scm {
                 git {
                     remote {
-                        url('https://github.com/pboyd-oss/build-sec-base.git')
+                        url('https://github.com/pboyd-oss/deploy-sec-base.git')
                         credentials('git-deploy-key')
                     }
                     branch('main')

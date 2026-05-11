@@ -21,7 +21,7 @@ pipeline {
     agent {
         kubernetes {
             cloud 'kubernetes'
-            inheritFrom 'build-sec-base'
+            inheritFrom 'deploy-sec-base'
         }
     }
 
@@ -73,7 +73,7 @@ pipeline {
                     env.TRIVY_IMG_HIGH     = '0'
                     env.TRIVY_IMG_SECRETS  = '0'
 
-                    container('build-sec-base') {
+                    container('deploy-sec-base') {
                         images.each { image ->
                             def outFile = "trivy-image-${image.tag.replaceAll('[/:@]', '-')}.json"
 
@@ -127,7 +127,7 @@ pipeline {
                     env.TRIVY_REPO_MISCONFIG_HIGH     = '0'
                     env.TRIVY_REPO_SECRETS            = '0'
 
-                    container('build-sec-base') {
+                    container('deploy-sec-base') {
                         // Scan source repository for IaC misconfigurations and hardcoded secrets.
                         // misconfig covers: Dockerfile, Terraform, K8s manifests, Helm charts.
                         // secret covers: plaintext credentials committed in any file.
@@ -175,7 +175,7 @@ pipeline {
                     env.CHECKOV_PASSED       = '0'
                     env.CHECKOV_BY_FRAMEWORK = '{}'
 
-                    container('build-sec-base') {
+                    container('deploy-sec-base') {
                         // Frameworks:
                         //   terraform      — Terraform modules (CIS benchmarks, provider misconfigs)
                         //   dockerfile     — Dockerfile best practices and security
@@ -242,7 +242,7 @@ pipeline {
                     def images = readJSON(file: 'artifacts.json').builds
                     env.SBOM_PACKAGE_COUNT = '0'
 
-                    container('build-sec-base') {
+                    container('deploy-sec-base') {
                         images.each { image ->
                             def sbomFile = "sbom-${image.tag.replaceAll('[/:@]', '-')}.json"
                             // Separate invocation from the vuln scan — no --exit-code, no severity
@@ -266,7 +266,7 @@ pipeline {
                     }
 
                     withCredentials([string(credentialsId: 'cosign-key', variable: 'COSIGN_PRIVATE_KEY')]) {
-                        container('build-sec-base') {
+                        container('deploy-sec-base') {
                             sh "printf '%s' \"\$COSIGN_PRIVATE_KEY\" > /tmp/cosign.key && chmod 600 /tmp/cosign.key"
 
                             images.each { image ->
@@ -339,7 +339,7 @@ pipeline {
                     ])
 
                     withCredentials([string(credentialsId: 'cosign-key', variable: 'COSIGN_PRIVATE_KEY')]) {
-                        container('build-sec-base') {
+                        container('deploy-sec-base') {
                             sh "printf '%s' \"\$COSIGN_PRIVATE_KEY\" > /tmp/cosign.key && chmod 600 /tmp/cosign.key"
 
                             images.each { image ->

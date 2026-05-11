@@ -9,13 +9,13 @@
 //   infrastructure/platform/token-service/     — K8s RBAC, deployment manifests
 //
 // Triggered by changes to the platform repo (https://github.com/pboyd-oss/talos-argocd-proxmox.git).
-// Runs on build-sec-base infrastructure — same pod template as PlatformScanPipeline.
+// Runs on deploy-sec-base infrastructure — same pod template as PlatformScanPipeline.
 
 pipeline {
     agent {
         kubernetes {
             cloud 'kubernetes'
-            inheritFrom 'build-sec-base'
+            inheritFrom 'deploy-sec-base'
         }
     }
 
@@ -51,7 +51,7 @@ pipeline {
                     env.TRIVY_MISCONFIG_HIGH     = '0'
                     env.TRIVY_SECRETS            = '0'
 
-                    container('build-sec-base') {
+                    container('deploy-sec-base') {
                         def exitCode = sh(
                             script: """
                                 trivy fs \
@@ -97,7 +97,7 @@ pipeline {
                     env.CHECKOV_PASSED       = '0'
                     env.CHECKOV_BY_FRAMEWORK = '{}'
 
-                    container('build-sec-base') {
+                    container('deploy-sec-base') {
                         // Terraform: IAM policy correctness, role trust conditions, SCP structure.
                         // Kubernetes: RBAC least-privilege, securityContext, deployment hardening.
                         // Secrets: committed credentials in policy files.
@@ -163,7 +163,7 @@ pipeline {
                 script {
                     env.TFSEC_FAILED = '0'
 
-                    container('build-sec-base') {
+                    container('deploy-sec-base') {
                         def exitCode = sh(
                             script: """
                                 tfsec platform-src/terraform/modules \
@@ -194,7 +194,7 @@ pipeline {
                 script {
                     catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
                         withCredentials([string(credentialsId: 'infracost-api-key', variable: 'INFRACOST_API_KEY')]) {
-                            container('build-sec-base') {
+                            container('deploy-sec-base') {
                                 sh """
                                     infracost breakdown \
                                         --path platform-src/terraform/modules \
