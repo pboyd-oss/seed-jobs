@@ -275,6 +275,38 @@ pipelineJob('platform/cosign/build') {
     logRotator(-1, 20)
 }
 
+folder('platform/base') {
+    displayName('base')
+    description('Platform base image — ubuntu:24.04 + apt packages. Parent of build-sec-base.')
+    authorization {
+        permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Cancel',    'admin')
+        permission('hudson.model.Item.Configure', 'admin')
+    }
+}
+
+pipelineJob('platform/base/build') {
+    displayName('build')
+    description('Builds and pushes harbor.tuxgrid.com/platform/base using kaniko.')
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://github.com/pboyd-oss/platform-base.git')
+                        credentials('git-deploy-key')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('Jenkinsfile')
+        }
+    }
+    triggers { scm('H/5 * * * *') }
+    logRotator(-1, 20)
+}
+
 folder('platform/build-sec-base') {
     displayName('build-sec-base')
     description('Platform security build agent image pipeline')
