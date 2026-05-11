@@ -130,7 +130,7 @@ private void signImages() {
             sh "printf '%s' \"\$COSIGN_PRIVATE_KEY\" > /tmp/cosign.key && chmod 600 /tmp/cosign.key"
             getImages().each { image ->
                 withEnv(["IMAGE_REF=${image.tag}"]) {
-                    sh 'cosign sign --key /tmp/cosign.key --yes "$IMAGE_REF"'
+                    sh "printf '\\n' | cosign sign --key /tmp/cosign.key --yes --password-stdin \"\$IMAGE_REF\""
                 }
             }
             sh 'rm -f /tmp/cosign.key'
