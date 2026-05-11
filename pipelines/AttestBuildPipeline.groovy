@@ -111,17 +111,17 @@ pipeline {
                             images.each { image ->
                                 withEnv(["IMAGE_REF=${image.tag}"]) {
                                     sh '''
-                                        printf '\n' | cosign attest \
+                                        COSIGN_PASSWORD="" cosign attest \
                                             --key /tmp/cosign.key \
                                             --predicate predicate-tests.json \
                                             --type 'https://tuxgrid.com/attestation/tests/v1' \
-                                            --yes --password-stdin "$IMAGE_REF"
+                                            --yes "$IMAGE_REF"
 
-                                        printf '\n' | cosign attest \
+                                        COSIGN_PASSWORD="" cosign attest \
                                             --key /tmp/cosign.key \
                                             --predicate predicate-build.json \
                                             --type 'https://tuxgrid.com/attestation/build/v1' \
-                                            --yes --password-stdin "$IMAGE_REF"
+                                            --yes "$IMAGE_REF"
                                     '''
                                 }
                             }
@@ -175,11 +175,11 @@ pipeline {
                             images.each { image ->
                                 withEnv(["IMAGE_REF=${image.tag}"]) {
                                     sh '''
-                                        printf '\n' | cosign attest \
+                                        COSIGN_PASSWORD="" cosign attest \
                                             --key /tmp/cosign.key \
                                             --predicate predicate-pipeline.json \
                                             --type 'https://tuxgrid.com/attestation/pipeline/v1' \
-                                            --yes --password-stdin "$IMAGE_REF"
+                                            --yes "$IMAGE_REF"
                                     '''
                                 }
                             }

@@ -273,11 +273,11 @@ pipeline {
                                 def sbomFile = "sbom-${image.tag.replaceAll('[/:@]', '-')}.json"
                                 withEnv(["IMAGE_REF=${image.tag}", "SBOM_FILE=${sbomFile}"]) {
                                     sh '''
-                                        printf '\n' | cosign attest \
+                                        COSIGN_PASSWORD="" cosign attest \
                                             --key /tmp/cosign.key \
                                             --predicate "$SBOM_FILE" \
                                             --type spdxjson \
-                                            --yes --password-stdin "$IMAGE_REF"
+                                            --yes "$IMAGE_REF"
                                     '''
                                 }
                             }
@@ -345,11 +345,11 @@ pipeline {
                             images.each { image ->
                                 withEnv(["IMAGE_REF=${image.tag}"]) {
                                     sh '''
-                                        printf '\n' | cosign attest \
+                                        COSIGN_PASSWORD="" cosign attest \
                                             --key /tmp/cosign.key \
                                             --predicate predicate-scan.json \
                                             --type 'https://tuxgrid.com/attestation/scan/v1' \
-                                            --yes --password-stdin "$IMAGE_REF"
+                                            --yes "$IMAGE_REF"
                                     '''
                                 }
                             }
