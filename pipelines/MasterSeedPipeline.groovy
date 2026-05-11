@@ -307,6 +307,38 @@ pipelineJob('platform/base/build') {
     logRotator(-1, 20)
 }
 
+folder('platform/build-base') {
+    displayName('build-base')
+    description('Platform build base image — make, gcc, build-essential, zip, unzip. For team build steps.')
+    authorization {
+        permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Cancel',    'admin')
+        permission('hudson.model.Item.Configure', 'admin')
+    }
+}
+
+pipelineJob('platform/build-base/build') {
+    displayName('build')
+    description('Builds and pushes harbor.tuxgrid.com/platform/build-base using kaniko.')
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://github.com/pboyd-oss/platform-build-base.git')
+                        credentials('git-deploy-key')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('Jenkinsfile')
+        }
+    }
+    triggers { scm('H/5 * * * *') }
+    logRotator(-1, 20)
+}
+
 folder('platform/deploy-base') {
     displayName('deploy-base')
     description('Platform deploy base image — cosign, skaffold, terraform. Parent of deploy-sec-base.')
