@@ -243,6 +243,38 @@ ${envLines}
 // Platform-wide jobs — created once, not per-team.
 def buildPlatformInfraDsl() {
     return """
+folder('platform/cosign') {
+    displayName('cosign')
+    description('Alpine + cosign sidecar image — used by build-sec-base-builder pod template')
+    authorization {
+        permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Cancel',    'admin')
+        permission('hudson.model.Item.Configure', 'admin')
+    }
+}
+
+pipelineJob('platform/cosign/build') {
+    displayName('build')
+    description('Builds and pushes harbor.tuxgrid.com/platform/cosign:v2.5.2 using kaniko.')
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://github.com/pboyd-oss/platform-cosign.git')
+                        credentials('git-deploy-key')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('Jenkinsfile')
+        }
+    }
+    triggers { scm('H/5 * * * *') }
+    logRotator(-1, 20)
+}
+
 folder('platform/build-sec-base') {
     displayName('build-sec-base')
     description('Platform security build agent image pipeline')
