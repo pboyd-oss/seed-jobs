@@ -109,7 +109,7 @@ pipeline {
                             sh "printf '%s' \"\$COSIGN_PRIVATE_KEY\" > /tmp/cosign.key && chmod 600 /tmp/cosign.key"
 
                             images.each { image ->
-                                withEnv(["IMAGE_REF=${image.tag}"]) {
+                                withEnv(["IMAGE_REF=${image.tag}", "COSIGN_PASSWORD="]) {
                                     sh '''
                                         cosign attest \
                                             --key /tmp/cosign.key \
@@ -173,7 +173,7 @@ pipeline {
                             sh "printf '%s' \"\$COSIGN_PRIVATE_KEY\" > /tmp/cosign.key && chmod 600 /tmp/cosign.key"
 
                             images.each { image ->
-                                withEnv(["IMAGE_REF=${image.tag}"]) {
+                                withEnv(["IMAGE_REF=${image.tag}", "COSIGN_PASSWORD="]) {
                                     sh '''
                                         cosign attest \
                                             --key /tmp/cosign.key \
