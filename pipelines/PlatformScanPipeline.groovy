@@ -431,9 +431,9 @@ pipeline {
                         }
                     }
 
-                    if (fileExists('tfplan.json')) {
+                    if (fileExists('tfplan')) {
                         env.TFPLAN_SHA256 = sh(
-                            script: "sha256sum tfplan.json | awk '{print \$1}'",
+                            script: "sha256sum tfplan | awk '{print \$1}'",
                             returnStdout: true
                         ).trim()
                         echo "Terraform plan SHA-256: ${env.TFPLAN_SHA256}"
@@ -486,7 +486,7 @@ pipeline {
         }
 
         stage('Push Artifacts') {
-            when { expression { return params.ENVIRONMENT?.trim() && (fileExists('rendered.yaml') || fileExists('tfplan.json')) } }
+            when { expression { return params.ENVIRONMENT?.trim() && (fileExists('rendered.yaml') || fileExists('tfplan')) } }
             steps {
                 script {
                     def parts    = params.UPSTREAM_JOB.split('/')
@@ -521,18 +521,18 @@ pipeline {
                                 echo "Pushed rendered.yaml → ${tag}"
                             }
 
-                            if (fileExists('tfplan.json')) {
+                            if (fileExists('tfplan')) {
                                 def tag = "harbor.tuxgrid.com/platform/scan-artifacts:${teamSlug}-${repoName}-${gitShort}-${envSlug}-tfplan"
                                 withEnv(["ARTIFACT_TAG=${tag}"]) {
                                     sh '''
                                         cosign upload blob \
-                                            -f tfplan.json \
-                                            --ct 'application/vnd.tuxgrid.terraform-plan.v1+json' \
+                                            -f tfplan \
+                                            --ct 'application/vnd.tuxgrid.terraform-plan.v1+binary' \
                                             "$ARTIFACT_TAG"
                                     '''
                                 }
                                 env.TFPLAN_OCI_REF = tag
-                                echo "Pushed tfplan.json → ${tag}"
+                                echo "Pushed tfplan → ${tag}"
                             }
 
                             sh 'rm -f ~/.docker/config.json'
