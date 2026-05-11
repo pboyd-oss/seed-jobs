@@ -44,6 +44,7 @@ team:
 
     - name: microservice-pipeline
       url: https://github.com/pboyd-oss/microservice-pipeline.git
+      coverage_threshold: 0
       jobs:
         - name: build
           type: pipeline

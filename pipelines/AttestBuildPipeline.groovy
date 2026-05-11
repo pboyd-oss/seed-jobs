@@ -20,8 +20,8 @@ def getBuild(String jobName, int buildNum) {
 pipeline {
     agent {
         kubernetes {
-            cloud env.TUXGRID_BUILD_CLOUD
-            inheritFrom 'base'
+            cloud 'kubernetes'
+            inheritFrom 'build-sec-base'
         }
     }
 
@@ -104,7 +104,7 @@ pipeline {
                     if (!images) error('artifacts.json contains no builds')
 
                     withCredentials([string(credentialsId: 'cosign-key', variable: 'COSIGN_PRIVATE_KEY')]) {
-                        container('skaffold') {
+                        container('build-sec-base') {
                             sh "printf '%s' \"\$COSIGN_PRIVATE_KEY\" > /tmp/cosign.key && chmod 600 /tmp/cosign.key"
 
                             images.each { image ->
@@ -167,7 +167,7 @@ pipeline {
                     def images = readJSON(file: 'artifacts.json').builds
 
                     withCredentials([string(credentialsId: 'cosign-key', variable: 'COSIGN_PRIVATE_KEY')]) {
-                        container('skaffold') {
+                        container('build-sec-base') {
                             sh "printf '%s' \"\$COSIGN_PRIVATE_KEY\" > /tmp/cosign.key && chmod 600 /tmp/cosign.key"
 
                             images.each { image ->
