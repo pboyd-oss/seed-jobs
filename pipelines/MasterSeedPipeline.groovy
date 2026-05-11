@@ -37,12 +37,13 @@ pipeline {
             steps {
                 script {
                     def clouds    = readYaml(file: 'clouds/cloud-registry.yml')
+                    def versions  = readYaml(file: 'config/platform-versions.yaml').tools
                     def teamFiles = findFiles(glob: 'teams/*.yml')
                     def allDsl    = new StringBuilder()
 
                     allDsl.append("folder('teams')    { description('Team workspaces') }\n\n")
                     allDsl.append("folder('platform') { description('Platform-controlled CD pipelines — do not modify') }\n\n")
-                    allDsl.append(buildPlatformInfraDsl())
+                    allDsl.append(buildPlatformInfraDsl(versions))
 
                     teamFiles.each { f ->
                         def team       = readYaml(file: f.path)
@@ -241,7 +242,7 @@ ${envLines}
 }
 
 // Platform-wide jobs — created once, not per-team.
-def buildPlatformInfraDsl() {
+def buildPlatformInfraDsl(Map versions) {
     return """
 folder('platform/bakery') {
     displayName('bakery')
@@ -267,7 +268,11 @@ folder('platform/bakery/cosign') {
 
 pipelineJob('platform/bakery/cosign/build') {
     displayName('build')
-    description('Builds and pushes harbor.tuxgrid.com/platform/cosign:v2.5.2 using kaniko.')
+    description('Builds and pushes harbor.tuxgrid.com/platform/cosign:${versions.cosign} using kaniko.')
+    environmentVariables {
+        env('COSIGN_VERSION', '${versions.cosign}')
+        env('ALPINE_VERSION', '${versions.alpine}')
+    }
     definition {
         cpsScm {
             scm {
@@ -364,6 +369,11 @@ folder('platform/bakery/deploy-base') {
 pipelineJob('platform/bakery/deploy-base/build') {
     displayName('build')
     description('Builds and pushes harbor.tuxgrid.com/platform/deploy-base using kaniko.')
+    environmentVariables {
+        env('COSIGN_VERSION',    '${versions.cosign}')
+        env('SKAFFOLD_VERSION',  '${versions.skaffold}')
+        env('TERRAFORM_VERSION', '${versions.terraform}')
+    }
     definition {
         cpsScm {
             scm {
@@ -396,6 +406,12 @@ folder('platform/bakery/deploy-sec-base') {
 pipelineJob('platform/bakery/deploy-sec-base/build') {
     displayName('build')
     description('Builds and pushes harbor.tuxgrid.com/platform/deploy-sec-base using kaniko.')
+    environmentVariables {
+        env('TRIVY_VERSION',   '${versions.trivy}')
+        env('TFSEC_VERSION',   '${versions.tfsec}')
+        env('CHECKOV_VERSION', '${versions.checkov}')
+        env('PYTHON_VERSION',  '${versions.python}')
+    }
     definition {
         cpsScm {
             scm {
