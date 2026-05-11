@@ -109,19 +109,19 @@ pipeline {
                             sh "printf '%s' \"\$COSIGN_PRIVATE_KEY\" > /tmp/cosign.key && chmod 600 /tmp/cosign.key"
 
                             images.each { image ->
-                                withEnv(["IMAGE_REF=${image.tag}", "COSIGN_PASSWORD="]) {
+                                withEnv(["IMAGE_REF=${image.tag}"]) {
                                     sh '''
-                                        cosign attest \
+                                        printf '\n' | cosign attest \
                                             --key /tmp/cosign.key \
                                             --predicate predicate-tests.json \
                                             --type 'https://tuxgrid.com/attestation/tests/v1' \
-                                            --yes "$IMAGE_REF"
+                                            --yes --password-stdin "$IMAGE_REF"
 
-                                        cosign attest \
+                                        printf '\n' | cosign attest \
                                             --key /tmp/cosign.key \
                                             --predicate predicate-build.json \
                                             --type 'https://tuxgrid.com/attestation/build/v1' \
-                                            --yes "$IMAGE_REF"
+                                            --yes --password-stdin "$IMAGE_REF"
                                     '''
                                 }
                             }
@@ -173,13 +173,13 @@ pipeline {
                             sh "printf '%s' \"\$COSIGN_PRIVATE_KEY\" > /tmp/cosign.key && chmod 600 /tmp/cosign.key"
 
                             images.each { image ->
-                                withEnv(["IMAGE_REF=${image.tag}", "COSIGN_PASSWORD="]) {
+                                withEnv(["IMAGE_REF=${image.tag}"]) {
                                     sh '''
-                                        cosign attest \
+                                        printf '\n' | cosign attest \
                                             --key /tmp/cosign.key \
                                             --predicate predicate-pipeline.json \
                                             --type 'https://tuxgrid.com/attestation/pipeline/v1' \
-                                            --yes "$IMAGE_REF"
+                                            --yes --password-stdin "$IMAGE_REF"
                                     '''
                                 }
                             }
