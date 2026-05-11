@@ -243,7 +243,18 @@ ${envLines}
 // Platform-wide jobs — created once, not per-team.
 def buildPlatformInfraDsl() {
     return """
-folder('platform/cosign') {
+folder('platform/bakery') {
+    displayName('bakery')
+    description('Platform base image build jobs — all images that form the platform image hierarchy.')
+    authorization {
+        permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Cancel',    'admin')
+        permission('hudson.model.Item.Configure', 'admin')
+    }
+}
+
+folder('platform/bakery/cosign') {
     displayName('cosign')
     description('Alpine + cosign sidecar image — used by deploy-sec-base-builder pod template')
     authorization {
@@ -254,7 +265,7 @@ folder('platform/cosign') {
     }
 }
 
-pipelineJob('platform/cosign/build') {
+pipelineJob('platform/bakery/cosign/build') {
     displayName('build')
     description('Builds and pushes harbor.tuxgrid.com/platform/cosign:v2.5.2 using kaniko.')
     definition {
@@ -275,7 +286,7 @@ pipelineJob('platform/cosign/build') {
     logRotator(-1, 20)
 }
 
-folder('platform/base') {
+folder('platform/bakery/base') {
     displayName('base')
     description('Platform base image — ubuntu:24.04 + apt packages. Parent of deploy-base.')
     authorization {
@@ -286,7 +297,7 @@ folder('platform/base') {
     }
 }
 
-pipelineJob('platform/base/build') {
+pipelineJob('platform/bakery/base/build') {
     displayName('build')
     description('Builds and pushes harbor.tuxgrid.com/platform/base using kaniko.')
     definition {
@@ -307,7 +318,7 @@ pipelineJob('platform/base/build') {
     logRotator(-1, 20)
 }
 
-folder('platform/build-base') {
+folder('platform/bakery/build-base') {
     displayName('build-base')
     description('Platform build base image — make, gcc, build-essential, zip, unzip. For team build steps.')
     authorization {
@@ -318,7 +329,7 @@ folder('platform/build-base') {
     }
 }
 
-pipelineJob('platform/build-base/build') {
+pipelineJob('platform/bakery/build-base/build') {
     displayName('build')
     description('Builds and pushes harbor.tuxgrid.com/platform/build-base using kaniko.')
     definition {
@@ -339,7 +350,7 @@ pipelineJob('platform/build-base/build') {
     logRotator(-1, 20)
 }
 
-folder('platform/deploy-base') {
+folder('platform/bakery/deploy-base') {
     displayName('deploy-base')
     description('Platform deploy base image — cosign, skaffold, terraform. Parent of deploy-sec-base.')
     authorization {
@@ -350,7 +361,7 @@ folder('platform/deploy-base') {
     }
 }
 
-pipelineJob('platform/deploy-base/build') {
+pipelineJob('platform/bakery/deploy-base/build') {
     displayName('build')
     description('Builds and pushes harbor.tuxgrid.com/platform/deploy-base using kaniko.')
     definition {
@@ -371,7 +382,7 @@ pipelineJob('platform/deploy-base/build') {
     logRotator(-1, 20)
 }
 
-folder('platform/deploy-sec-base') {
+folder('platform/bakery/deploy-sec-base') {
     displayName('deploy-sec-base')
     description('Platform deploy security image — trivy, tfsec, checkov on top of deploy-base.')
     authorization {
@@ -382,7 +393,7 @@ folder('platform/deploy-sec-base') {
     }
 }
 
-pipelineJob('platform/deploy-sec-base/build') {
+pipelineJob('platform/bakery/deploy-sec-base/build') {
     displayName('build')
     description('Builds and pushes harbor.tuxgrid.com/platform/deploy-sec-base using kaniko.')
     definition {
