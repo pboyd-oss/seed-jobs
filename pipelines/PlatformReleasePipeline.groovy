@@ -60,6 +60,12 @@ pipeline {
             }
         }
 
+        stage('Cedar Gate') {
+            steps {
+                script { checkCedarPromote(params.ENVIRONMENT) }
+            }
+        }
+
         stage('Pull and Verify') {
             steps {
                 script { pullAndVerifyArtifacts() }
@@ -81,6 +87,96 @@ pipeline {
 }
 
 // ---------------------------------------------------------------------------
+
+// Calls Cedar Promote action and fails the build on an explicit DENY.
+// Collects attestation types present on the image and scan age from scan-predicate.json,
+// then asks Cedar whether promoting to this environment is permitted.
+// Non-blocking if the Cedar sidecar is unreachable — logs and continues.
+private void checkCedarPromote(String environment) {
+    def log = { String msg -> echo "[Platform:cedar] ${msg}" }
+
+    def images   = readJSON(file: 'artifacts.json').builds
+    if (!images) error('artifacts.json contains no builds')
+    def imageRef = images[0].tag
+
+    // Determine which attestation types are present on the image.
+    def knownTypes = [
+        'https://tuxgrid.com/attestation/build/v1',
+        'https://tuxgrid.com/attestation/tests/v1',
+        'https://tuxgrid.com/attestation/scan/v1',
+        'https://tuxgrid.com/attestation/pipeline/v1',
+    ]
+    def presentTypes = []
+    withCredentials([
+        string(credentialsId: 'cosign-public-key', variable: 'COSIGN_PUBLIC_KEY'),
+        usernamePassword(credentialsId: 'harbor-robot-platform', usernameVariable: 'HARBOR_USER', passwordVariable: 'HARBOR_PASS'),
+    ]) {
+        container('deploy-sec-base') {
+            sh "printf '%s' \"\$COSIGN_PUBLIC_KEY\" > /tmp/cosign.pub"
+            sh '''
+                AUTH=$(printf '%s:%s' "$HARBOR_USER" "$HARBOR_PASS" | base64 | tr -d '\\n')
+                mkdir -p ~/.docker
+                printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > ~/.docker/config.json
+            '''
+            knownTypes.each { t ->
+                def rc = sh(script: "cosign verify-attestation --key /tmp/cosign.pub --type '${t}' '${imageRef}' > /dev/null 2>&1 && echo ok || echo fail", returnStdout: true).trim()
+                if (rc == 'ok') presentTypes << t
+            }
+            sh 'rm -f /tmp/cosign.pub ~/.docker/config.json'
+        }
+    }
+    log("Attestation types present: ${presentTypes}")
+
+    // Calculate scan age in seconds from scan-predicate.json timestamp.
+    def scanAgeSeconds = 0L
+    if (fileExists('scan-predicate.json')) {
+        try {
+            def predicate  = readJSON(file: 'scan-predicate.json')
+            def scanTs     = java.time.Instant.parse(predicate.timestamp as String).toEpochMilli()
+            scanAgeSeconds = (System.currentTimeMillis() - scanTs) / 1000L
+        } catch (ignored) {}
+    }
+
+    // Call Cedar sidecar.
+    def cedarUrl = 'http://platform-cedar-sidecar.platform.svc.cluster.local/authorize'
+    def payload  = groovy.json.JsonOutput.toJson([
+        principal: "TuxGrid::Pipeline::\"${env.TUXGRID_TEAM_SLUG}/${env.JOB_BASE_NAME}\"",
+        action:    'TuxGrid::Action::"Promote"',
+        resource:  "TuxGrid::Image::\"${imageRef}\"",
+        entities:  [],
+        context: [
+            targetTier:       environment,
+            attestationTypes: presentTypes,
+            scanAgeSeconds:   scanAgeSeconds,
+        ],
+    ])
+
+    try {
+        def response = new URL(cedarUrl).openConnection().with {
+            requestMethod = 'POST'
+            doOutput      = true
+            connectTimeout = 5000
+            readTimeout    = 5000
+            setRequestProperty('Content-Type', 'application/json')
+            outputStream.write(payload.bytes)
+            def code = responseCode
+            def body = (code < 400 ? inputStream : errorStream)?.text ?: ''
+            [code: code, body: body]
+        }
+        if (response.code == 200) {
+            def result = readJSON(text: response.body)
+            if (result.decision == 'DENY') {
+                def reasons = result.reasons ? result.reasons.join('; ') : 'policy denied'
+                error("[Platform:cedar] Promote to '${environment}' denied: ${reasons}")
+            }
+            log("Promote to '${environment}' allowed")
+        } else {
+            log("Cedar sidecar returned HTTP ${response.code} — continuing (non-blocking during rollout)")
+        }
+    } catch (java.net.ConnectException e) {
+        log("Cedar sidecar unreachable — continuing (non-blocking during rollout)")
+    }
+}
 
 private void validateJobScope(String upstreamJob) {
     def allowedRoot = "teams/${env.TUXGRID_TEAM_SLUG}/"

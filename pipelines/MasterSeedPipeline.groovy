@@ -596,6 +596,32 @@ pipelineJob('platform/policy-scan') {
     logRotator(-1, 50)
 }
 
+pipelineJob('platform/audit-compliance') {
+    displayName('audit-compliance')
+    description('Daily Cedar AuditCompliance scan — finds team pipelines that are stale, abandoned, or missing scan/v1 attestations. Marks UNSTABLE on gaps, does not block builds.')
+    authorization {
+        permission('hudson.model.Item.Read',   'admin')
+        permission('hudson.model.Item.Build',  'admin')
+        permission('hudson.model.Item.Cancel', 'admin')
+    }
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://github.com/pboyd-oss/seed-jobs.git')
+                        credentials('git-deploy-key')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('pipelines/PlatformAuditCompliancePipeline.groovy')
+        }
+    }
+    triggers { cron('H 6 * * *') }
+    logRotator(-1, 90)
+}
+
 """
 }
 
