@@ -91,7 +91,7 @@ pipeline {
 // Calls Cedar Promote action and fails the build on an explicit DENY.
 // Collects attestation types present on the image and scan age from scan-predicate.json,
 // then asks Cedar whether promoting to this environment is permitted.
-// Non-blocking if the Cedar sidecar is unreachable — logs and continues.
+// Hard failure if the Cedar sidecar is unreachable or returns DENY.
 private void checkCedarPromote(String environment) {
     def log = { String msg -> echo "[Platform:cedar] ${msg}" }
 
@@ -171,10 +171,10 @@ private void checkCedarPromote(String environment) {
             }
             log("Promote to '${environment}' allowed")
         } else {
-            log("Cedar sidecar returned HTTP ${response.code} — continuing (non-blocking during rollout)")
+            error("[Platform:cedar] Cedar sidecar returned HTTP ${response.code} — promote blocked")
         }
     } catch (java.net.ConnectException e) {
-        log("Cedar sidecar unreachable — continuing (non-blocking during rollout)")
+        error("[Platform:cedar] Cedar sidecar unreachable — promote blocked")
     }
 }
 
