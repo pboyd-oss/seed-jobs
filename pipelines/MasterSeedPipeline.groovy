@@ -407,6 +407,7 @@ pipelineJob('platform/bakery/deploy-sec-base/build') {
     displayName('build')
     description('Builds and pushes harbor.tuxgrid.com/platform/deploy-sec-base using kaniko.')
     environmentVariables {
+        env('SYFT_VERSION',    '${versions.syft}')
         env('TRIVY_VERSION',   '${versions.trivy}')
         env('TFSEC_VERSION',   '${versions.tfsec}')
         env('CHECKOV_VERSION', '${versions.checkov}')
