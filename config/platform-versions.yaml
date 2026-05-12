@@ -2,7 +2,7 @@ tools:
   cosign:    "v2.5.2"
   skaffold:  "v2.15.0"
   terraform: "1.9.0"
-  syft:      "1.24.1"
+  syft:      "1.44.0"
   trivy:     "0.60.0"
   tfsec:     "v1.28.11"
   checkov:   "3.2.285"
