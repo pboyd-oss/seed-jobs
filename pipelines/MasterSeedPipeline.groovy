@@ -534,6 +534,37 @@ pipelineJob('platform/services/token-service/build') {
     logRotator(-1, 20)
 }
 
+folder('platform/services/cedar-sidecar') {
+    displayName('cedar-sidecar')
+    description('Platform Cedar policy sidecar — evaluates attestation and promotion policies')
+    authorization {
+        permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Cancel',    'admin')
+        permission('hudson.model.Item.Configure', 'admin')
+    }
+}
+
+pipelineJob('platform/services/cedar-sidecar/build') {
+    displayName('build')
+    description('Builds and pushes harbor.tuxgrid.com/platform/cedar-sidecar using kaniko.')
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://github.com/pboyd-oss/platform-cedar.git')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('Jenkinsfile')
+        }
+    }
+    triggers { scm('H/5 * * * *') }
+    logRotator(-1, 20)
+}
+
 pipelineJob('platform/policy-scan') {
     displayName('policy-scan')
     description('Scans platform IAM and Kubernetes policy code (deploy role boundary, SCP, IRSA, Token Service RBAC) with Trivy + Checkov. Trigger on commits to talos-argocd-proxmox.')
