@@ -51,6 +51,14 @@ team:
           branch: main
           jenkinsfile: Jenkinsfile
 
+    - name: graph-kb
+      url: https://github.com/pboyd-oss/graph-kb.git
+      coverage_threshold: 0
+      jobs:
+        - name: build
+          type: multibranch
+          jenkinsfile: Jenkinsfile
+
   environments:
     - name: dev
       cloud: build-shared

@@ -42,6 +42,8 @@ pipeline {
         string(name: 'PLATFORM_AUDIT_ID',         defaultValue: '')
         string(name: 'PLATFORM_AUDIT_LOG_REF',   defaultValue: '')
         string(name: 'PLATFORM_AUDIT_LOG_DIGEST', defaultValue: '')
+        string(name: 'PLATFORM_GIT_COMMIT',      defaultValue: '')
+        string(name: 'PLATFORM_GIT_URL',         defaultValue: '')
     }
 
     stages {
@@ -96,9 +98,11 @@ pipeline {
                     ])
 
                     writeJSON(file: 'predicate-build.json', json: [
-                        job:       params.UPSTREAM_JOB,
-                        build:     params.UPSTREAM_BUILD,
-                        timestamp: timestamp,
+                        job:        params.UPSTREAM_JOB,
+                        build:      params.UPSTREAM_BUILD,
+                        timestamp:  timestamp,
+                        git_commit: params.PLATFORM_GIT_COMMIT ?: '',
+                        git_url:    params.PLATFORM_GIT_URL    ?: '',
                     ])
 
                     def images = readJSON(file: 'artifacts.json').builds

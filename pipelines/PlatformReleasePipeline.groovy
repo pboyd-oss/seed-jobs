@@ -198,6 +198,7 @@ private void waitForBuildAttestations() {
     def types       = [
         'https://tuxgrid.com/attestation/tests/v1',
         'https://tuxgrid.com/attestation/build/v1',
+        'slsaprovenance1',
     ]
 
     echo "Waiting for build attestations on ${imageRef} (timeout: ${timeoutMins} min)..."
@@ -263,6 +264,7 @@ private void extractScanPredicate(String environment) {
     writeFile file: 'find_predicate.py', text: '''\
 import json, base64, sys
 
+SCAN_TYPE = "https://tuxgrid.com/attestation/scan/v1"
 env_arg = sys.argv[1]
 data = sys.stdin.read().strip()
 if not data:
@@ -273,7 +275,11 @@ for line in data.splitlines():
         continue
     try:
         envelope  = json.loads(line)
-        statement = json.loads(base64.b64decode(envelope["payload"] + "=="))
+        payload   = envelope["payload"]
+        padding   = (4 - len(payload) % 4) % 4
+        statement = json.loads(base64.b64decode(payload + "=" * padding))
+        if statement.get("predicateType") != SCAN_TYPE:
+            continue
         predicate = statement.get("predicate", {})
         if predicate.get("environment", "") == env_arg:
             with open("scan-predicate.json", "w") as f:

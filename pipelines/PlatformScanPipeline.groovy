@@ -61,6 +61,10 @@ pipeline {
                         sh '''
                             git clone --depth 1 "$GIT_REPO_URL" scan-src
                             cd scan-src && git checkout "$GIT_REPO_SHA"
+                            git verify-commit "$GIT_REPO_SHA" || {
+                                echo "[Platform] FATAL: commit $GIT_REPO_SHA has no valid GPG/SSH signature — scan refused"
+                                exit 1
+                            }
                         '''
                     }
                 }
