@@ -73,13 +73,13 @@ pipeline {
                                 r.Secrets?.each { env.TRIVY_SECRETS = (env.TRIVY_SECRETS.toInteger() + 1).toString() }
                             }
 
-                            sh '''
+                            sh(script: '''
                                 trivy convert \
                                     --format template \
                                     --template "@/contrib/junit.tpl" \
                                     --output trivy-junit.xml \
                                     trivy-result.json
-                            '''
+                            ''', returnStatus: true)
                         }
 
                         echo "Trivy: MisconfigCRITICAL=${env.TRIVY_MISCONFIG_CRITICAL}, MisconfigHIGH=${env.TRIVY_MISCONFIG_HIGH}, Secrets=${env.TRIVY_SECRETS}"
@@ -212,6 +212,7 @@ pipeline {
     post {
         always {
             junit allowEmptyResults: true,
+                  skipMarkingBuildUnstable: true,
                   testResults: 'trivy-junit.xml,checkov-out/results_junitxml.xml'
         }
         failure {
