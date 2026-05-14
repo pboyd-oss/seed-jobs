@@ -56,6 +56,8 @@ pipeline {
                                     --severity HIGH,CRITICAL \
                                     --scanners misconfig,secret \
                                     --no-progress \
+                                    --skip-policy-update \
+                                    --timeout 15m \
                                     --format json \
                                     --output ../trivy-result.json \
                                     .
