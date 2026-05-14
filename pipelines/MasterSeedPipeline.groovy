@@ -478,7 +478,7 @@ multibranchPipelineJob('platform/infra/terraform') {
             id('platform-infra-terraform')
             repoOwner('pboyd-oss')
             repository('infra-terraform')
-            credentialsId('github-token')
+            scanCredentialsId('github-token')
             buildOriginBranch(true)
             buildOriginBranchWithPR(false)
             buildOriginPRMerge(true)
