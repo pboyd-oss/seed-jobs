@@ -59,6 +59,15 @@ team:
           type: multibranch
           jenkinsfile: Jenkinsfile
 
+    - name: platform-agent
+      url: https://github.com/pboyd-oss/platform-agent.git
+      coverage_threshold: 0
+      jobs:
+        - name: build
+          type: pipeline
+          branch: main
+          jenkinsfile: Jenkinsfile
+
   environments:
     - name: dev
       cloud: build-shared
