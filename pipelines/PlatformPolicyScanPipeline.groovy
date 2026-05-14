@@ -2,11 +2,8 @@
 // Validates the platform's own IAM and Kubernetes policy code using the same
 // scanner stack used for team builds — Trivy + Checkov on platform infrastructure.
 //
-// Scanned paths (relative to the platform repo root):
-//   terraform/modules/platform-deploy-role/    — deploy role, permission boundary
-//   terraform/modules/platform-scp/            — SCP protecting deploy roles
-//   terraform/modules/platform-token-service-irsa/ — Token Service IRSA permissions
-//   infrastructure/platform/token-service/     — K8s RBAC, deployment manifests
+// Scans the full platform repo clone (platform-src/) so new Terraform modules,
+// K8s manifests, and Dockerfiles are picked up automatically without config changes.
 //
 // Triggered by changes to the platform repo (https://github.com/pboyd-oss/talos-argocd-proxmox.git).
 // Runs on deploy-sec-base infrastructure — same pod template as PlatformScanPipeline.
@@ -52,46 +49,34 @@ pipeline {
                     env.TRIVY_SECRETS            = '0'
 
                     container('deploy-sec-base') {
-                        def trivyScan = { String path, String outFile ->
-                            def exitCode = sh(
-                                script: """
-                                    trivy fs \
-                                        --exit-code 1 \
-                                        --severity HIGH,CRITICAL \
-                                        --scanners misconfig,secret \
-                                        --no-progress \
-                                        --format json \
-                                        --output ${outFile} \
-                                        ${path}
-                                """,
-                                returnStatus: true
-                            )
-                            if (fileExists(outFile)) {
-                                def result = readJSON(file: outFile)
-                                result.Results?.each { r ->
-                                    r.Misconfigurations?.each { m ->
-                                        if (m.Severity == 'CRITICAL') env.TRIVY_MISCONFIG_CRITICAL = (env.TRIVY_MISCONFIG_CRITICAL.toInteger() + 1).toString()
-                                        if (m.Severity == 'HIGH')     env.TRIVY_MISCONFIG_HIGH     = (env.TRIVY_MISCONFIG_HIGH.toInteger()     + 1).toString()
-                                    }
-                                    r.Secrets?.each { env.TRIVY_SECRETS = (env.TRIVY_SECRETS.toInteger() + 1).toString() }
+                        def exitCode = sh(
+                            script: '''
+                                trivy fs \
+                                    --exit-code 1 \
+                                    --severity HIGH,CRITICAL \
+                                    --scanners misconfig,secret \
+                                    --no-progress \
+                                    --format json \
+                                    --output trivy-result.json \
+                                    platform-src/
+                            ''',
+                            returnStatus: true
+                        )
+
+                        if (fileExists('trivy-result.json')) {
+                            def result = readJSON(file: 'trivy-result.json')
+                            result.Results?.each { r ->
+                                r.Misconfigurations?.each { m ->
+                                    if (m.Severity == 'CRITICAL') env.TRIVY_MISCONFIG_CRITICAL = (env.TRIVY_MISCONFIG_CRITICAL.toInteger() + 1).toString()
+                                    if (m.Severity == 'HIGH')     env.TRIVY_MISCONFIG_HIGH     = (env.TRIVY_MISCONFIG_HIGH.toInteger()     + 1).toString()
                                 }
+                                r.Secrets?.each { env.TRIVY_SECRETS = (env.TRIVY_SECRETS.toInteger() + 1).toString() }
                             }
-                            return exitCode
-                        }
-
-                        // Scan all Terraform modules in one pass; trivy recurses into each module.
-                        def exitTerraform = trivyScan('platform-src/terraform/modules', 'trivy-result-terraform.json')
-
-                        // K8s RBAC and deployment manifests — path added when token-service is created.
-                        def exitK8s = 0
-                        def k8sPath = 'platform-src/infrastructure/platform/token-service'
-                        if (sh(script: "[ -d ${k8sPath} ]", returnStatus: true) == 0) {
-                            exitK8s = trivyScan(k8sPath, 'trivy-result-k8s.json')
                         }
 
                         echo "Trivy: MisconfigCRITICAL=${env.TRIVY_MISCONFIG_CRITICAL}, MisconfigHIGH=${env.TRIVY_MISCONFIG_HIGH}, Secrets=${env.TRIVY_SECRETS}"
 
-                        if (exitTerraform != 0 || exitK8s != 0) {
+                        if (exitCode != 0) {
                             error("Trivy found HIGH/CRITICAL findings in platform policy code: ${env.TRIVY_MISCONFIG_CRITICAL} critical, ${env.TRIVY_MISCONFIG_HIGH} high misconfigs, ${env.TRIVY_SECRETS} secrets")
                         }
                     }
