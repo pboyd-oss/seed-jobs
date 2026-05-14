@@ -51,14 +51,14 @@ pipeline {
                     container('deploy-sec-base') {
                         def exitCode = sh(
                             script: '''
-                                trivy fs \
+                                cd platform-src && trivy fs \
                                     --exit-code 1 \
                                     --severity HIGH,CRITICAL \
                                     --scanners misconfig,secret \
                                     --no-progress \
                                     --format json \
-                                    --output trivy-result.json \
-                                    platform-src/
+                                    --output ../trivy-result.json \
+                                    .
                             ''',
                             returnStatus: true
                         )
