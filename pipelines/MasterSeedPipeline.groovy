@@ -455,6 +455,51 @@ pipelineJob('platform/bakery/deploy-sec-base/build') {
     logRotator(-1, 20)
 }
 
+folder('platform/infra') {
+    displayName('infra')
+    description('Platform-controlled infrastructure pipelines — Terraform GitOps.')
+    authorization {
+        permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Read',      'jenkins-operator')
+        permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Build',     'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'admin')
+        permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Configure', 'jenkins-operator')
+    }
+}
+
+multibranchPipelineJob('platform/infra/terraform') {
+    displayName('terraform')
+    description('Terraform GitOps pipeline. Runs plan on PRs (posts comment), applies on merge to main.')
+    branchSources {
+        github {
+            id('platform-infra-terraform')
+            repoOwner('pboyd-oss')
+            repository('infra-terraform')
+            credentialsId('github-token')
+            buildOriginBranch(true)
+            buildOriginBranchWithPR(false)
+            buildOriginPRMerge(true)
+            buildOriginPRHead(false)
+            buildForkPRMerge(false)
+            buildForkPRHead(false)
+        }
+    }
+    factory {
+        workflowBranchProjectFactory {
+            scriptPath('Jenkinsfile')
+        }
+    }
+    triggers {
+        periodicFolderTrigger { interval('300000') }
+    }
+    orphanedItemStrategy {
+        discardOldItems { numToKeep(10) }
+    }
+}
+
 folder('platform/services') {
     displayName('services')
     description('Platform service build jobs — audit-service, tetragon-forwarder, token-service.')
