@@ -52,16 +52,7 @@ pipeline {
                     env.TRIVY_SECRETS            = '0'
 
                     container('deploy-sec-base') {
-                        def scanPaths = [
-                            'platform-src/terraform/modules/platform-deploy-role',
-                            'platform-src/terraform/modules/platform-scp',
-                            'platform-src/terraform/modules/platform-token-service-irsa',
-                            'platform-src/infrastructure/platform/token-service',
-                        ]
-
-                        def overallExit = 0
-                        scanPaths.eachWithIndex { path, idx ->
-                            def outFile = "trivy-result-${idx}.json"
+                        def trivyScan = { String path, String outFile ->
                             def exitCode = sh(
                                 script: """
                                     trivy fs \
@@ -75,8 +66,6 @@ pipeline {
                                 """,
                                 returnStatus: true
                             )
-                            if (exitCode != 0) overallExit = 1
-
                             if (fileExists(outFile)) {
                                 def result = readJSON(file: outFile)
                                 result.Results?.each { r ->
@@ -87,11 +76,22 @@ pipeline {
                                     r.Secrets?.each { env.TRIVY_SECRETS = (env.TRIVY_SECRETS.toInteger() + 1).toString() }
                                 }
                             }
+                            return exitCode
+                        }
+
+                        // Scan all Terraform modules in one pass; trivy recurses into each module.
+                        def exitTerraform = trivyScan('platform-src/terraform/modules', 'trivy-result-terraform.json')
+
+                        // K8s RBAC and deployment manifests — path added when token-service is created.
+                        def exitK8s = 0
+                        def k8sPath = 'platform-src/infrastructure/platform/token-service'
+                        if (sh(script: "[ -d ${k8sPath} ]", returnStatus: true) == 0) {
+                            exitK8s = trivyScan(k8sPath, 'trivy-result-k8s.json')
                         }
 
                         echo "Trivy: MisconfigCRITICAL=${env.TRIVY_MISCONFIG_CRITICAL}, MisconfigHIGH=${env.TRIVY_MISCONFIG_HIGH}, Secrets=${env.TRIVY_SECRETS}"
 
-                        if (overallExit != 0) {
+                        if (exitTerraform != 0 || exitK8s != 0) {
                             error("Trivy found HIGH/CRITICAL findings in platform policy code: ${env.TRIVY_MISCONFIG_CRITICAL} critical, ${env.TRIVY_MISCONFIG_HIGH} high misconfigs, ${env.TRIVY_SECRETS} secrets")
                         }
                     }
