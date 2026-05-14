@@ -249,9 +249,13 @@ folder('platform/bakery') {
     description('Platform base image build jobs — all images that form the platform image hierarchy.')
     authorization {
         permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Read',      'jenkins-operator')
         permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Build',     'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'jenkins-operator')
         permission('hudson.model.Item.Cancel',    'admin')
         permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Configure', 'jenkins-operator')
     }
 }
 
@@ -260,9 +264,13 @@ folder('platform/bakery/cosign') {
     description('Alpine + cosign sidecar image — used by deploy-sec-base-builder pod template')
     authorization {
         permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Read',      'jenkins-operator')
         permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Build',     'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'jenkins-operator')
         permission('hudson.model.Item.Cancel',    'admin')
         permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Configure', 'jenkins-operator')
     }
 }
 
@@ -296,9 +304,13 @@ folder('platform/bakery/base') {
     description('Platform base image — ubuntu:24.04 + apt packages. Parent of deploy-base.')
     authorization {
         permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Read',      'jenkins-operator')
         permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Build',     'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'jenkins-operator')
         permission('hudson.model.Item.Cancel',    'admin')
         permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Configure', 'jenkins-operator')
     }
 }
 
@@ -328,9 +340,13 @@ folder('platform/bakery/build-base') {
     description('Platform build base image — make, gcc, build-essential, zip, unzip. For team build steps.')
     authorization {
         permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Read',      'jenkins-operator')
         permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Build',     'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'jenkins-operator')
         permission('hudson.model.Item.Cancel',    'admin')
         permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Configure', 'jenkins-operator')
     }
 }
 
@@ -360,9 +376,13 @@ folder('platform/bakery/deploy-base') {
     description('Platform deploy base image — cosign, skaffold, terraform. Parent of deploy-sec-base.')
     authorization {
         permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Read',      'jenkins-operator')
         permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Build',     'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'jenkins-operator')
         permission('hudson.model.Item.Cancel',    'admin')
         permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Configure', 'jenkins-operator')
     }
 }
 
@@ -397,9 +417,13 @@ folder('platform/bakery/deploy-sec-base') {
     description('Platform deploy security image — trivy, tfsec, checkov on top of deploy-base.')
     authorization {
         permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Read',      'jenkins-operator')
         permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Build',     'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'jenkins-operator')
         permission('hudson.model.Item.Cancel',    'admin')
         permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Configure', 'jenkins-operator')
     }
 }
 
@@ -436,9 +460,13 @@ folder('platform/services') {
     description('Platform service build jobs — audit-service, tetragon-forwarder, token-service.')
     authorization {
         permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Read',      'jenkins-operator')
         permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Build',     'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'jenkins-operator')
         permission('hudson.model.Item.Cancel',    'admin')
         permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Configure', 'jenkins-operator')
     }
 }
 
@@ -447,9 +475,13 @@ folder('platform/services/audit-service') {
     description('Platform audit service — build pipeline security event correlation')
     authorization {
         permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Read',      'jenkins-operator')
         permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Build',     'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'jenkins-operator')
         permission('hudson.model.Item.Cancel',    'admin')
         permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Configure', 'jenkins-operator')
     }
 }
 
@@ -478,9 +510,13 @@ folder('platform/services/tetragon-forwarder') {
     description('Platform Tetragon forwarder — forwards kernel exec/network events to audit service')
     authorization {
         permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Read',      'jenkins-operator')
         permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Build',     'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'jenkins-operator')
         permission('hudson.model.Item.Cancel',    'admin')
         permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Configure', 'jenkins-operator')
     }
 }
 
@@ -509,9 +545,13 @@ folder('platform/services/token-service') {
     description('Platform token service — OIDC-gated STS credential vending')
     authorization {
         permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Read',      'jenkins-operator')
         permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Build',     'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'jenkins-operator')
         permission('hudson.model.Item.Cancel',    'admin')
         permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Configure', 'jenkins-operator')
     }
 }
 
@@ -540,9 +580,13 @@ folder('platform/services/cedar-sidecar') {
     description('Platform Cedar policy sidecar — evaluates attestation and promotion policies')
     authorization {
         permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Read',      'jenkins-operator')
         permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Build',     'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'jenkins-operator')
         permission('hudson.model.Item.Cancel',    'admin')
         permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Configure', 'jenkins-operator')
     }
 }
 
@@ -571,9 +615,13 @@ folder('platform/services/platform-agent') {
     description('Platform engineering AI agent — LangGraph-powered chat interface for provisioning and operations')
     authorization {
         permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Read',      'jenkins-operator')
         permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Build',     'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'jenkins-operator')
         permission('hudson.model.Item.Cancel',    'admin')
         permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Configure', 'jenkins-operator')
     }
 }
 
@@ -602,9 +650,13 @@ pipelineJob('platform/policy-scan') {
     description('Scans platform IAM and Kubernetes policy code (deploy role boundary, SCP, IRSA, Token Service RBAC) with Trivy + Checkov. Trigger on commits to talos-argocd-proxmox.')
     authorization {
         permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Read',      'jenkins-operator')
         permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Build',     'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'jenkins-operator')
         permission('hudson.model.Item.Cancel',    'admin')
         permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Configure', 'jenkins-operator')
     }
     parameters {
         stringParam('GIT_URL',    'https://github.com/pboyd-oss/talos-argocd-proxmox.git', 'Platform infrastructure repo')
@@ -679,8 +731,11 @@ folder('platform/${t.slug}') {
     authorization {
         ${teamReadBuild}
         permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Configure', 'jenkins-operator')
         permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Read',      'jenkins-operator')
         permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Build',     'jenkins-operator')
     }
 }
 
@@ -718,8 +773,12 @@ pipelineJob('platform/${t.slug}/attest') {
     authorization {
         ${teamReadOnly}
         permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Configure', 'jenkins-operator')
         permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Read',      'jenkins-operator')
         permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Build',     'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'jenkins-operator')
         permission('hudson.model.Item.Cancel',    'admin')
     }
     parameters {
@@ -761,8 +820,12 @@ pipelineJob('platform/${t.slug}/scan') {
     authorization {
         ${teamReadBuild}
         permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Configure', 'jenkins-operator')
         permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Read',      'jenkins-operator')
         permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Build',     'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'jenkins-operator')
         permission('hudson.model.Item.Cancel',    'admin')
     }
     parameters {
@@ -802,8 +865,11 @@ folder('${repoPath}') {
     authorization {
         ${teamReadBuild}
         permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Configure', 'jenkins-operator')
         permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Read',      'jenkins-operator')
         permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Build',     'jenkins-operator')
     }
 }
 
@@ -813,8 +879,12 @@ pipelineJob('${repoPath}/source-scan') {
     authorization {
         ${teamReadBuild}
         permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Configure', 'jenkins-operator')
         permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Read',      'jenkins-operator')
         permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Build',     'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'jenkins-operator')
         permission('hudson.model.Item.Cancel',    'admin')
     }
     parameters {
