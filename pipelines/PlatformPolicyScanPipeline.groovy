@@ -72,6 +72,14 @@ pipeline {
                                 }
                                 r.Secrets?.each { env.TRIVY_SECRETS = (env.TRIVY_SECRETS.toInteger() + 1).toString() }
                             }
+
+                            sh '''
+                                trivy convert \
+                                    --format template \
+                                    --template "@/contrib/junit.tpl" \
+                                    --output trivy-junit.xml \
+                                    trivy-result.json
+                            '''
                         }
 
                         echo "Trivy: MisconfigCRITICAL=${env.TRIVY_MISCONFIG_CRITICAL}, MisconfigHIGH=${env.TRIVY_MISCONFIG_HIGH}, Secrets=${env.TRIVY_SECRETS}"
@@ -101,13 +109,14 @@ pipeline {
                                     --compact \
                                     --quiet \
                                     --output json \
-                                    > ../checkov-result.json
+                                    --output junitxml \
+                                    --output-file-path ../checkov-out/
                             ''',
                             returnStatus: true
                         )
 
-                        if (fileExists('checkov-result.json')) {
-                            def raw = readFile('checkov-result.json').trim()
+                        if (fileExists('checkov-out/results_json.json')) {
+                            def raw = readFile('checkov-out/results_json.json').trim()
                             if (raw && (raw.startsWith('[') || raw.startsWith('{'))) {
                                 def parsed     = readJSON(text: raw)
                                 def allResults = parsed instanceof List ? parsed : [parsed]
@@ -201,6 +210,10 @@ pipeline {
     }
 
     post {
+        always {
+            junit allowEmptyResults: true,
+                  testResults: 'trivy-junit.xml,checkov-out/results_junitxml.xml'
+        }
         failure {
             echo "[Platform] Policy scan FAILED — platform infrastructure code has HIGH/CRITICAL security findings. Merge blocked."
         }
