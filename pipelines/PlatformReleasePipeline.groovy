@@ -50,7 +50,10 @@ pipeline {
 
         stage('Attest Check') {
             steps {
-                script { waitForBuildAttestations() }
+                script {
+                    waitForBuildAttestations()
+                    verifyAuditDigest()
+                }
             }
         }
 
@@ -138,7 +141,7 @@ private void checkCedarPromote(String environment) {
     }
 
     // Call Cedar sidecar.
-    def cedarUrl = 'http://platform-cedar-sidecar.platform.svc.cluster.local/authorize'
+    def cedarUrl = 'https://cedar.platform.tuxgrid.com/authorize'
     def payload  = groovy.json.JsonOutput.toJson([
         principal: "TuxGrid::Pipeline::\"${env.TUXGRID_TEAM_SLUG}/${env.JOB_BASE_NAME}\"",
         action:    'TuxGrid::Action::"Promote"',
@@ -198,6 +201,7 @@ private void waitForBuildAttestations() {
     def types       = [
         'https://tuxgrid.com/attestation/tests/v1',
         'https://tuxgrid.com/attestation/build/v1',
+        'https://tuxgrid.com/attestation/pipeline/v1',
         'slsaprovenance1',
     ]
 
@@ -248,6 +252,97 @@ private void waitForBuildAttestations() {
             }
         }
     }
+}
+
+// Decode the pipeline/v1 attestation predicate, call the audit service summary
+// endpoint live, and assert the SHA-256 of the response matches the digest that
+// was recorded at attestation time. Prevents a compromised attestation job from
+// embedding a digest that differs from the actual audit trail.
+private void verifyAuditDigest() {
+    def log = { String msg -> echo "[Platform:audit] ${msg}" }
+
+    def images   = readJSON(file: 'artifacts.json').builds
+    if (!images) error('artifacts.json contains no builds')
+    def imageRef = images[0].tag
+
+    writeFile file: 'extract_pipeline_predicate.py', text: '''\
+import json, base64, sys
+
+PIPELINE_TYPE = "https://tuxgrid.com/attestation/pipeline/v1"
+data = sys.stdin.read().strip()
+if not data:
+    print("[Platform] No pipeline/v1 attestations found", file=sys.stderr)
+    sys.exit(1)
+for line in data.splitlines():
+    if not line.strip():
+        continue
+    try:
+        envelope  = json.loads(line)
+        payload   = envelope["payload"]
+        padding   = (4 - len(payload) % 4) % 4
+        statement = json.loads(base64.b64decode(payload + "=" * padding))
+        if statement.get("predicateType") != PIPELINE_TYPE:
+            continue
+        predicate    = statement.get("predicate", {})
+        audit_id     = predicate.get("auditId", "")
+        audit_digest = predicate.get("auditLogDigest", "")
+        if audit_id and audit_digest:
+            print(json.dumps({"auditId": audit_id, "auditLogDigest": audit_digest}))
+            sys.exit(0)
+    except Exception as e:
+        print(f"[Platform] Skipping malformed attestation: {e}", file=sys.stderr)
+print("[Platform] pipeline/v1 predicate missing auditId or auditLogDigest", file=sys.stderr)
+sys.exit(1)
+'''
+
+    def auditId        = ''
+    def expectedDigest = ''
+
+    withCredentials([
+        string(credentialsId: 'cosign-public-key', variable: 'COSIGN_PUBLIC_KEY'),
+        usernamePassword(credentialsId: 'harbor-robot-platform', usernameVariable: 'HARBOR_USER', passwordVariable: 'HARBOR_PASS'),
+    ]) {
+        container('deploy-sec-base') {
+            sh "printf '%s' \"\$COSIGN_PUBLIC_KEY\" > /tmp/cosign.pub"
+            sh '''
+                AUTH=$(printf '%s:%s' "$HARBOR_USER" "$HARBOR_PASS" | base64 | tr -d '\\n')
+                mkdir -p ~/.docker
+                printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > ~/.docker/config.json
+            '''
+
+            try {
+                def resultJson = sh(
+                    script: "cosign verify-attestation --key /tmp/cosign.pub --type 'https://tuxgrid.com/attestation/pipeline/v1' '${imageRef}' 2>/dev/null | python3 extract_pipeline_predicate.py",
+                    returnStdout: true
+                ).trim()
+                def result      = readJSON(text: resultJson)
+                auditId         = result.auditId        as String
+                expectedDigest  = result.auditLogDigest as String
+            } finally {
+                sh 'rm -f /tmp/cosign.pub ~/.docker/config.json extract_pipeline_predicate.py'
+            }
+        }
+    }
+
+    if (!auditId || !expectedDigest) {
+        error("[Platform:audit] pipeline/v1 attestation missing auditId or auditLogDigest")
+    }
+
+    log("Verifying audit digest for ${auditId}...")
+
+    def actualDigest = ''
+    container('deploy-sec-base') {
+        actualDigest = sh(
+            script: "curl -sf --max-time 10 'http://platform-audit-service.platform.svc.cluster.local:8080/builds/${auditId}/summary' | sha256sum | awk '{print \$1}'",
+            returnStdout: true
+        ).trim()
+    }
+
+    if (actualDigest != expectedDigest) {
+        error("[Platform:audit] Audit digest mismatch for ${auditId}\n  expected: ${expectedDigest}\n  actual:   ${actualDigest}")
+    }
+
+    log("Audit digest verified ✓  (${expectedDigest})")
 }
 
 // Verify-download the scan/v1 attestation for the requested environment and write

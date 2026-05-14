@@ -47,6 +47,11 @@ pipeline {
                         sh '''
                             git clone --depth 1 "$GIT_REPO_URL" scan-src
                             cd scan-src && git fetch --depth 1 origin "$GIT_REPO_SHA" && git checkout "$GIT_REPO_SHA"
+                            ACTUAL=$(git rev-parse HEAD)
+                            if [ "$ACTUAL" != "$GIT_REPO_SHA" ]; then
+                                printf '[Platform] FATAL: post-clone SHA mismatch: expected %s, got %s\n' "$GIT_REPO_SHA" "$ACTUAL" >&2
+                                exit 1
+                            fi
                         '''
                     }
                 }
