@@ -92,26 +92,17 @@ pipeline {
                     env.CHECKOV_BY_FRAMEWORK = '{}'
 
                     container('deploy-sec-base') {
-                        // Terraform: IAM policy correctness, role trust conditions, SCP structure.
-                        // Kubernetes: RBAC least-privilege, securityContext, deployment hardening.
-                        // Secrets: committed credentials in policy files.
-                        //
-                        // Known false positives are suppressed with inline checkov:skip annotations
-                        // in the source files (e.g. the boundary policy's intentional Allow *).
                         def exitCode = sh(
-                            script: """
-                                checkov \
-                                    -d platform-src/terraform/modules/platform-deploy-role \
-                                    -d platform-src/terraform/modules/platform-scp \
-                                    -d platform-src/terraform/modules/platform-token-service-irsa \
-                                    -d platform-src/infrastructure/platform/token-service \
+                            script: '''
+                                cd platform-src && checkov \
+                                    -d . \
                                     --framework terraform,kubernetes,secrets \
                                     --hard-fail-on HIGH,CRITICAL \
                                     --compact \
                                     --quiet \
                                     --output json \
-                                    > checkov-result.json
-                            """,
+                                    > ../checkov-result.json
+                            ''',
                             returnStatus: true
                         )
 
