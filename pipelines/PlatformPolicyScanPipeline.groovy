@@ -52,37 +52,46 @@ pipeline {
                     env.TRIVY_SECRETS            = '0'
 
                     container('deploy-sec-base') {
-                        def exitCode = sh(
-                            script: """
-                                trivy fs \
-                                    --exit-code 1 \
-                                    --severity HIGH,CRITICAL \
-                                    --scanners misconfig,secret \
-                                    --no-progress \
-                                    --format json \
-                                    --output trivy-result.json \
-                                    platform-src/terraform/modules/platform-deploy-role \
-                                    platform-src/terraform/modules/platform-scp \
-                                    platform-src/terraform/modules/platform-token-service-irsa \
-                                    platform-src/infrastructure/platform/token-service
-                            """,
-                            returnStatus: true
-                        )
+                        def scanPaths = [
+                            'platform-src/terraform/modules/platform-deploy-role',
+                            'platform-src/terraform/modules/platform-scp',
+                            'platform-src/terraform/modules/platform-token-service-irsa',
+                            'platform-src/infrastructure/platform/token-service',
+                        ]
 
-                        if (fileExists('trivy-result.json')) {
-                            def result = readJSON(file: 'trivy-result.json')
-                            result.Results?.each { r ->
-                                r.Misconfigurations?.each { m ->
-                                    if (m.Severity == 'CRITICAL') env.TRIVY_MISCONFIG_CRITICAL = (env.TRIVY_MISCONFIG_CRITICAL.toInteger() + 1).toString()
-                                    if (m.Severity == 'HIGH')     env.TRIVY_MISCONFIG_HIGH     = (env.TRIVY_MISCONFIG_HIGH.toInteger()     + 1).toString()
+                        def overallExit = 0
+                        scanPaths.eachWithIndex { path, idx ->
+                            def outFile = "trivy-result-${idx}.json"
+                            def exitCode = sh(
+                                script: """
+                                    trivy fs \
+                                        --exit-code 1 \
+                                        --severity HIGH,CRITICAL \
+                                        --scanners misconfig,secret \
+                                        --no-progress \
+                                        --format json \
+                                        --output ${outFile} \
+                                        ${path}
+                                """,
+                                returnStatus: true
+                            )
+                            if (exitCode != 0) overallExit = 1
+
+                            if (fileExists(outFile)) {
+                                def result = readJSON(file: outFile)
+                                result.Results?.each { r ->
+                                    r.Misconfigurations?.each { m ->
+                                        if (m.Severity == 'CRITICAL') env.TRIVY_MISCONFIG_CRITICAL = (env.TRIVY_MISCONFIG_CRITICAL.toInteger() + 1).toString()
+                                        if (m.Severity == 'HIGH')     env.TRIVY_MISCONFIG_HIGH     = (env.TRIVY_MISCONFIG_HIGH.toInteger()     + 1).toString()
+                                    }
+                                    r.Secrets?.each { env.TRIVY_SECRETS = (env.TRIVY_SECRETS.toInteger() + 1).toString() }
                                 }
-                                r.Secrets?.each { env.TRIVY_SECRETS = (env.TRIVY_SECRETS.toInteger() + 1).toString() }
                             }
                         }
 
                         echo "Trivy: MisconfigCRITICAL=${env.TRIVY_MISCONFIG_CRITICAL}, MisconfigHIGH=${env.TRIVY_MISCONFIG_HIGH}, Secrets=${env.TRIVY_SECRETS}"
 
-                        if (exitCode != 0) {
+                        if (overallExit != 0) {
                             error("Trivy found HIGH/CRITICAL findings in platform policy code: ${env.TRIVY_MISCONFIG_CRITICAL} critical, ${env.TRIVY_MISCONFIG_HIGH} high misconfigs, ${env.TRIVY_SECRETS} secrets")
                         }
                     }
