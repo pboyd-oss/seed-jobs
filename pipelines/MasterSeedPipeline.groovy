@@ -566,6 +566,37 @@ pipelineJob('platform/services/cedar-sidecar/build') {
     logRotator(-1, 20)
 }
 
+folder('platform/services/platform-agent') {
+    displayName('platform-agent')
+    description('Platform engineering AI agent — LangGraph-powered chat interface for provisioning and operations')
+    authorization {
+        permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Cancel',    'admin')
+        permission('hudson.model.Item.Configure', 'admin')
+    }
+}
+
+pipelineJob('platform/services/platform-agent/build') {
+    displayName('build')
+    description('Builds and pushes harbor.tuxgrid.com/platform/platform-agent using kaniko.')
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://github.com/pboyd-oss/platform-agent.git')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('Jenkinsfile')
+        }
+    }
+    triggers { scm('H/5 * * * *') }
+    logRotator(-1, 20)
+}
+
 pipelineJob('platform/policy-scan') {
     displayName('policy-scan')
     description('Scans platform IAM and Kubernetes policy code (deploy role boundary, SCP, IRSA, Token Service RBAC) with Trivy + Checkov. Trigger on commits to talos-argocd-proxmox.')
