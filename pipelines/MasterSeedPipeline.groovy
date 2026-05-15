@@ -457,6 +457,42 @@ pipelineJob('platform/bakery/deploy-sec-base/build') {
     logRotator(-1, 20)
 }
 
+folder('platform/bakery/backstage') {
+    displayName('backstage')
+    description('Custom Backstage developer portal image with platform plugins.')
+    authorization {
+        permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Read',      'jenkins-operator')
+        permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Build',     'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'admin')
+        permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Configure', 'jenkins-operator')
+    }
+}
+
+pipelineJob('platform/bakery/backstage/build') {
+    displayName('build')
+    description('Builds and pushes harbor.tuxgrid.com/platform/backstage using kaniko.')
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://github.com/pboyd-oss/platform-backstage.git')
+                        credentials('git-deploy-key')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('Jenkinsfile')
+        }
+    }
+    triggers { scm('H/5 * * * *') }
+    logRotator(-1, 20)
+}
+
 folder('platform/infra') {
     displayName('infra')
     description('Platform-controlled infrastructure pipelines — Terraform GitOps.')
