@@ -213,7 +213,9 @@ multibranchPipelineJob('${jobPath}') {
 
 def pipelineBlock(String jobPath, Map repo, Map job, Map envVars) {
     def envLines     = envVars.collect { k, v -> "        env('${k}', '${v}')" }.join('\n')
-    def triggerBlock = job.cron ? "\n    triggers { cron('${job.cron}') }" : "\n    triggers { scm('H/5 * * * *') }"
+    def triggerBlock = job.cron
+        ? "\n    properties { pipelineTriggers { triggers { cron { spec('${job.cron}') } } } }"
+        : "\n    triggers { scm('H/5 * * * *') }"
 
     return """
 pipelineJob('${jobPath}') {
@@ -747,7 +749,11 @@ pipelineJob('platform/audit-compliance') {
             scriptPath('pipelines/PlatformAuditCompliancePipeline.groovy')
         }
     }
-    triggers { cron('H 6 * * *') }
+    properties {
+        pipelineTriggers {
+            triggers { cron { spec('H 6 * * *') } }
+        }
+    }
     logRotator(-1, 90)
 }
 
