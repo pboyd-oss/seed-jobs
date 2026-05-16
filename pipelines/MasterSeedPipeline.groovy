@@ -394,6 +394,7 @@ pipelineJob('platform/bakery/deploy-base/build') {
     environmentVariables {
         env('COSIGN_VERSION',    '${versions.cosign}')
         env('SKAFFOLD_VERSION',  '${versions.skaffold}')
+        env('K8S_TOOLS_VERSION', '${versions.k8s_tools}')
         env('TERRAFORM_VERSION', '${versions.terraform}')
     }
     definition {
