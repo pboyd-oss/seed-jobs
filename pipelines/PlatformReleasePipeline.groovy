@@ -504,7 +504,7 @@ private void signImages() {
             '''
             for (int i = 0; i < images.size(); i++) {
                 withEnv(["IMAGE_REF=${images[i].tag}"]) {
-                    sh 'COSIGN_PASSWORD="" cosign sign --key /tmp/cosign.key --yes "$IMAGE_REF"'
+                    sh 'COSIGN_PASSWORD="" cosign sign --key /tmp/cosign.key --yes --tlog-upload=false "$IMAGE_REF"'
                 }
             }
             sh 'rm -f /tmp/cosign.key ~/.docker/config.json'
