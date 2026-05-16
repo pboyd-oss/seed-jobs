@@ -587,6 +587,7 @@ pipeline {
                                             --key /tmp/cosign.key \
                                             --predicate "$SBOM_FILE" \
                                             --type spdxjson \
+                                            --tlog-upload=false \
                                             --yes "$IMAGE_REF"
                                     '''
                                 }
@@ -674,6 +675,7 @@ pipeline {
                                             --key /tmp/cosign.key \
                                             --predicate predicate-scan.json \
                                             --type 'https://tuxgrid.com/attestation/scan/v1' \
+                                            --tlog-upload=false \
                                             --yes "$IMAGE_REF"
                                     '''
                                 }

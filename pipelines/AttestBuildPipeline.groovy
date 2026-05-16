@@ -119,12 +119,14 @@ pipeline {
                                             --key /tmp/cosign.key \
                                             --predicate predicate-tests.json \
                                             --type 'https://tuxgrid.com/attestation/tests/v1' \
+                                            --tlog-upload=false \
                                             --yes "$IMAGE_REF"
 
                                         COSIGN_PASSWORD="" cosign attest \
                                             --key /tmp/cosign.key \
                                             --predicate predicate-build.json \
                                             --type 'https://tuxgrid.com/attestation/build/v1' \
+                                            --tlog-upload=false \
                                             --yes "$IMAGE_REF"
                                     '''
                                 }
@@ -183,6 +185,7 @@ pipeline {
                                             --key /tmp/cosign.key \
                                             --predicate predicate-pipeline.json \
                                             --type 'https://tuxgrid.com/attestation/pipeline/v1' \
+                                            --tlog-upload=false \
                                             --yes "$IMAGE_REF"
                                     '''
                                 }
