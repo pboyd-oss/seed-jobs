@@ -622,12 +622,14 @@ folder('platform/services') {
 }
 
 private String buildPlatformServiceDsl(Map svc) {
-    def auth       = platformAuthBlock()
-    def buildJob   = "platform/services/${svc.slug}/build"
-    def scanJob    = "platform/services/${svc.slug}/scan"
-    def deployJob  = "platform/services/${svc.slug}/deploy"
-    def releaseJob = "platform/services/${svc.slug}/release"
-    def pipeJob    = "platform/services/${svc.slug}/pipeline"
+    def auth           = platformAuthBlock()
+    def buildJob       = "platform/services/${svc.slug}/build"
+    def sourceScanJob  = "platform/services/${svc.slug}/source-scan"
+    def scanJob        = "platform/services/${svc.slug}/scan"
+    def attestJob      = "platform/services/${svc.slug}/attest"
+    def deployJob      = "platform/services/${svc.slug}/deploy"
+    def releaseJob     = "platform/services/${svc.slug}/release"
+    def pipeJob        = "platform/services/${svc.slug}/pipeline"
 
     return """
 folder('platform/services/${svc.slug}') {
@@ -781,6 +783,67 @@ pipelineJob('${pipeJob}') {
                 }
             }
             scriptPath('pipelines/PlatformServicePipeline.groovy')
+        }
+    }
+    logRotator(-1, 30)
+}
+
+pipelineJob('${sourceScanJob}') {
+    displayName('source-scan')
+    description('Source scan for ${svc.slug}. Clones at HEAD, auto-detects commit SHA, runs Trivy secrets, tfsec, and Checkov. Must pass before attestation is granted.')
+    ${auth}
+    parameters {
+        stringParam('GIT_URL', '${svc.git_url}', 'Repository URL to scan (pre-populated)')
+    }
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://github.com/pboyd-oss/seed-jobs.git')
+                        credentials('git-deploy-key')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('pipelines/PlatformSourceScanPipeline.groovy')
+        }
+    }
+    logRotator(-1, 50)
+}
+
+pipelineJob('${attestJob}') {
+    displayName('attest')
+    description('Triggered by RunListener only. Creates cosign attestations after verified build of ${svc.slug}.')
+    ${auth}
+    parameters {
+        stringParam('UPSTREAM_JOB',              '${buildJob}', 'Full job path of the completed build')
+        stringParam('UPSTREAM_BUILD',            '', 'Build number')
+        stringParam('PLATFORM_TESTS_COUNT',      '0', '')
+        stringParam('PLATFORM_TESTS_FAILURES',   '0', '')
+        stringParam('PLATFORM_COVERAGE_PCT',     '0', '')
+        stringParam('PLATFORM_COVERAGE_THRESH',  '0', '')
+        stringParam('PLATFORM_SCAN_JOB_REF',     '', '')
+        stringParam('PLATFORM_STAGES_JSON',      '[]', '')
+        stringParam('PLATFORM_LIBRARIES_JSON',   '[]', '')
+        stringParam('PLATFORM_AUDIT_ID',         '', '')
+        stringParam('PLATFORM_AUDIT_LOG_REF',    '', '')
+        stringParam('PLATFORM_AUDIT_LOG_DIGEST', '', '')
+        stringParam('PLATFORM_GIT_COMMIT',       '', '')
+        stringParam('PLATFORM_GIT_URL',          '', '')
+    }
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://github.com/pboyd-oss/seed-jobs.git')
+                        credentials('git-deploy-key')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('pipelines/AttestBuildPipeline.groovy')
         }
     }
     logRotator(-1, 30)

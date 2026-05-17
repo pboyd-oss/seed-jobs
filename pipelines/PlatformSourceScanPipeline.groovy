@@ -1,14 +1,14 @@
 // Platform-controlled source scan pipeline.
-// Runs before the build stage in the team's Jenkinsfile — no image exists yet.
-// Teams call this as a blocking step and wait for PASS before proceeding to build:
+// Runs before the build stage — no image exists yet.
 //
-//   stage('Source Scan') {
-//       steps {
-//           build job: "platform/${TUXGRID_TEAM_SLUG}/${env.JOB_BASE_NAME}/source-scan",
-//                 parameters: [string(name: 'GIT_COMMIT', value: env.GIT_COMMIT)],
-//                 wait: true
-//       }
-//   }
+// Two calling modes:
+//   Teams — pass GIT_COMMIT explicitly (pinned to the checkout SHA):
+//       build job: "platform/${TUXGRID_TEAM_SLUG}/${env.JOB_BASE_NAME}/source-scan",
+//             parameters: [string(name: 'GIT_COMMIT', value: env.GIT_COMMIT)],
+//             wait: true
+//
+//   Platform services — no parameters; GIT_COMMIT is auto-detected from HEAD:
+//       build job: 'platform/services/${slug}/source-scan', wait: true
 //
 // Three scanners run against the source at the exact pinned commit:
 //   1. Trivy fs (secrets)      — hardcoded credentials, API keys, tokens
@@ -17,6 +17,8 @@
 //
 // Build listener Standard 7 checks that this pipeline succeeded for the exact
 // GIT_COMMIT before triggering scan/attest. Teams cannot forge or bypass the result.
+// Platform service scans self-generate GIT_COMMIT and inject it back as a build
+// parameter so the attest listener can match on it the same way.
 
 pipeline {
     agent {
@@ -33,26 +35,53 @@ pipeline {
 
     parameters {
         string(name: 'GIT_URL',    description: 'Repository URL to scan (pre-populated from job config)')
-        string(name: 'GIT_COMMIT', description: 'Exact 40-char commit SHA to scan')
+        string(name: 'GIT_COMMIT', defaultValue: '', description: 'Exact 40-char commit SHA to scan. Leave empty for platform service builds — SHA is auto-detected from HEAD.')
     }
 
     stages {
         stage('Clone') {
             steps {
                 script {
-                    if (!(params.GIT_COMMIT ==~ /^[0-9a-f]{40}$/)) {
-                        error("GIT_COMMIT is not a valid 40-char SHA: '${params.GIT_COMMIT}'")
-                    }
-                    withEnv(["GIT_REPO_URL=${params.GIT_URL}", "GIT_REPO_SHA=${params.GIT_COMMIT}"]) {
-                        sh '''
-                            git clone --depth 1 "$GIT_REPO_URL" scan-src
-                            cd scan-src && git fetch --depth 1 origin "$GIT_REPO_SHA" && git checkout "$GIT_REPO_SHA"
-                            ACTUAL=$(git rev-parse HEAD)
-                            if [ "$ACTUAL" != "$GIT_REPO_SHA" ]; then
-                                printf '[Platform] FATAL: post-clone SHA mismatch: expected %s, got %s\n' "$GIT_REPO_SHA" "$ACTUAL" >&2
-                                exit 1
-                            fi
-                        '''
+                    def callerSha = params.GIT_COMMIT?.trim()
+
+                    if (callerSha) {
+                        // Teams pass GIT_COMMIT explicitly — verify it matches the actual checkout.
+                        if (!(callerSha ==~ /^[0-9a-f]{40}$/)) {
+                            error("GIT_COMMIT is not a valid 40-char SHA: '${callerSha}'")
+                        }
+                        withEnv(["GIT_REPO_URL=${params.GIT_URL}", "GIT_REPO_SHA=${callerSha}"]) {
+                            sh '''
+                                git clone --depth 1 "$GIT_REPO_URL" scan-src
+                                cd scan-src && git fetch --depth 1 origin "$GIT_REPO_SHA" && git checkout "$GIT_REPO_SHA"
+                                ACTUAL=$(git rev-parse HEAD)
+                                if [ "$ACTUAL" != "$GIT_REPO_SHA" ]; then
+                                    printf '[Platform] FATAL: post-clone SHA mismatch: expected %s, got %s\n' "$GIT_REPO_SHA" "$ACTUAL" >&2
+                                    exit 1
+                                fi
+                            '''
+                        }
+                        env.RESOLVED_GIT_COMMIT = callerSha
+                    } else {
+                        // Platform service builds — clone at HEAD and self-generate the SHA.
+                        withEnv(["GIT_REPO_URL=${params.GIT_URL}"]) {
+                            env.RESOLVED_GIT_COMMIT = sh(
+                                script: '''
+                                    git clone --depth 1 "$GIT_REPO_URL" scan-src
+                                    git -C scan-src rev-parse HEAD
+                                ''',
+                                returnStdout: true
+                            ).trim()
+                        }
+                        if (!(env.RESOLVED_GIT_COMMIT ==~ /^[0-9a-f]{40}$/)) {
+                            error("Auto-detected commit SHA is invalid: '${env.RESOLVED_GIT_COMMIT}'")
+                        }
+                        // Inject the resolved SHA back as a build parameter so the attest listener
+                        // can match this source-scan result to the build's GIT_COMMIT.
+                        currentBuild.rawBuild.replaceAction(new hudson.model.ParametersAction([
+                            new hudson.model.StringParameterValue('GIT_URL',    params.GIT_URL),
+                            new hudson.model.StringParameterValue('GIT_COMMIT', env.RESOLVED_GIT_COMMIT),
+                        ]))
+                        echo "[Platform] Auto-detected GIT_COMMIT: ${env.RESOLVED_GIT_COMMIT}"
                     }
                 }
             }
