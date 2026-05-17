@@ -1,0 +1,8 @@
+service:
+  slug: attest-coordinator
+  name: attest-coordinator
+  desc: "Platform attestation coordinator — collects build evidence and gates signing"
+  git_url: https://github.com/pboyd-oss/platform-attest-coordinator.git
+  workload: platform-attest-coordinator
+  namespace: platform
+  kind: deployment
