@@ -144,7 +144,7 @@ pipeline {
                                             --no-progress \
                                             --format json \
                                             --output "$OUT_FILE" \
-                                            --db-repository harbor.tuxgrid.com/ghcr.io/aquasec/trivy-db:2 \
+                                            --db-repository harbor.tuxgrid.com/platform/trivy-db:2 \
                                             "$IMAGE_REF"
                                     ''',
                                     returnStatus: true
@@ -195,7 +195,7 @@ pipeline {
                                     --no-progress \
                                     --format json \
                                     --output trivy-repo-result.json \
-                                    --db-repository harbor.tuxgrid.com/ghcr.io/aquasec/trivy-db:2 \
+                                    --db-repository harbor.tuxgrid.com/platform/trivy-db:2 \
                                     scan-src/
                             """,
                             returnStatus: true
@@ -581,7 +581,7 @@ pipeline {
                                         --format spdx-json \
                                         --output "$SBOM_FILE" \
                                         --no-progress \
-                                        --db-repository harbor.tuxgrid.com/ghcr.io/aquasec/trivy-db:2 \
+                                        --db-repository harbor.tuxgrid.com/platform/trivy-db:2 \
                                         "$IMAGE_REF"
                                 '''
                             }
