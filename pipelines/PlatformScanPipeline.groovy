@@ -39,6 +39,11 @@ pipeline {
         string(name: 'ENVIRONMENT',    defaultValue: '', description: 'Target environment for render + plan (optional — skips steps 5–9 if empty)')
     }
 
+    environment {
+        // Written by Verify with Harbor robot creds; persists for Trivy and SBOM stages.
+        DOCKER_CONFIG = '/tmp/.docker'
+    }
+
     stages {
         stage('Fetch') {
             steps {
@@ -105,7 +110,7 @@ pipeline {
                                     sh 'cosign verify --key /tmp/cosign.pub --insecure-ignore-tlog=true "$IMAGE_REF"'
                                 }
                             }
-                            sh 'rm -f /tmp/cosign.pub /tmp/.docker/config.json'
+                            sh 'rm -f /tmp/cosign.pub'
                         }
                     }
 
@@ -553,7 +558,6 @@ pipeline {
                                 echo "Pushed tfplan → ${tag}"
                             }
 
-                            sh 'rm -f /tmp/.docker/config.json'
                         }
                     }
                 }
@@ -707,6 +711,11 @@ pipeline {
     }
 
     post {
+        always {
+            container('deploy-sec-base') {
+                sh 'rm -f /tmp/.docker/config.json'
+            }
+        }
         failure {
             script {
                 echo "[Platform] Scan FAILED for ${params.UPSTREAM_JOB} #${params.UPSTREAM_BUILD} — no scan/v1 attestation will be created"
