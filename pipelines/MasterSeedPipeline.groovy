@@ -558,7 +558,7 @@ folder('${repoPath}') {
 
 pipelineJob('${repoPath}/source-scan') {
     displayName('source-scan')
-    description('Platform source scan for ${repo.name}. Clones at HEAD, auto-detects commit SHA, runs Trivy secrets, tfsec, and Checkov. Call with no parameters before building.')
+    description('Platform source scan for ${repo.name}. Triggered by attest listener — not called from Jenkinsfiles. Runs Trivy secrets, tfsec, and Checkov at the pinned build commit.')
     authorization {
         ${teamReadBuild}
         permission('hudson.model.Item.Configure', 'admin')
@@ -571,7 +571,10 @@ pipelineJob('${repoPath}/source-scan') {
         permission('hudson.model.Item.Cancel',    'admin')
     }
     parameters {
-        stringParam('GIT_URL', '${repo.url}', 'Repository URL to scan (pre-populated)')
+        stringParam('GIT_URL',        '${repo.url}', 'Repository URL to scan (pre-populated)')
+        stringParam('GIT_COMMIT',     '',            'Exact 40-char commit SHA — supplied by attest listener from BuildData')
+        stringParam('UPSTREAM_JOB',   '',            'Upstream build job path')
+        stringParam('UPSTREAM_BUILD', '',            'Upstream build number')
     }
     definition {
         cpsScm {
@@ -789,10 +792,13 @@ pipelineJob('${pipeJob}') {
 
 pipelineJob('${sourceScanJob}') {
     displayName('source-scan')
-    description('Source scan for ${svc.slug}. Clones at HEAD, auto-detects commit SHA, runs Trivy secrets, tfsec, and Checkov. Must pass before attestation is granted.')
+    description('Source scan for ${svc.slug}. Triggered by attest listener — not called from Jenkinsfiles. Runs Trivy secrets, tfsec, and Checkov at the pinned build commit.')
     ${auth}
     parameters {
-        stringParam('GIT_URL', '${svc.git_url}', 'Repository URL to scan (pre-populated)')
+        stringParam('GIT_URL',        '${svc.git_url}', 'Repository URL to scan (pre-populated)')
+        stringParam('GIT_COMMIT',     '',               'Exact 40-char commit SHA — supplied by attest listener from BuildData')
+        stringParam('UPSTREAM_JOB',   '',               'Upstream build job path')
+        stringParam('UPSTREAM_BUILD', '',               'Upstream build number')
     }
     definition {
         cpsScm {

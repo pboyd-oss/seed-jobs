@@ -1,21 +1,15 @@
 // Platform-controlled source scan pipeline.
-// Runs before the build stage — no image exists yet.
-// Called with no parameters by both teams and platform services:
+// Triggered by the attest listener after a build completes — never called from Jenkinsfiles.
+// GIT_COMMIT is supplied by the listener from BuildData (the git plugin's tamper-proof
+// checkout record), so it is always pinned to the exact commit of the upstream build.
 //
-//   build job: "platform/${TUXGRID_TEAM_SLUG}/${env.JOB_BASE_NAME}/source-scan", wait: true
-//   build job: 'platform/services/${slug}/source-scan', wait: true
-//
-// GIT_COMMIT is always auto-detected by cloning GIT_URL at HEAD — never caller-supplied.
-// The detected SHA is injected back as a build parameter so the attest listener can
-// match this source-scan result to the exact commit in the upstream build.
-//
-// Three scanners run against the source at the detected commit:
+// Three scanners run against the source at the exact pinned commit:
 //   1. Trivy fs (secrets)      — hardcoded credentials, API keys, tokens
 //   2. tfsec                   — Terraform HIGH/CRITICAL misconfigurations
 //   3. Checkov                 — Dockerfile, Terraform, K8s, Helm, Kustomize, GitHub Actions, secrets
 //
-// Build listener Standard 7 checks that this pipeline succeeded for the exact
-// GIT_COMMIT before triggering scan/attest.
+// The attest listener checks this pipeline succeeded for the exact GIT_COMMIT before
+// scheduling attestation. Runs in parallel with the image scan.
 
 pipeline {
     agent {
@@ -31,32 +25,30 @@ pipeline {
     }
 
     parameters {
-        string(name: 'GIT_URL', description: 'Repository URL to scan (pre-populated from job config)')
+        string(name: 'GIT_URL',        description: 'Repository URL to scan (pre-populated from job config)')
+        string(name: 'GIT_COMMIT',     description: 'Exact 40-char commit SHA — supplied by attest listener from BuildData')
+        string(name: 'UPSTREAM_JOB',   defaultValue: '', description: 'Upstream build job path — used by attest listener to find this result')
+        string(name: 'UPSTREAM_BUILD', defaultValue: '', description: 'Upstream build number — used by attest listener to find this result')
     }
 
     stages {
         stage('Clone') {
             steps {
                 script {
-                    withEnv(["GIT_REPO_URL=${params.GIT_URL}"]) {
-                        env.RESOLVED_GIT_COMMIT = sh(
-                            script: '''
-                                git clone --depth 1 "$GIT_REPO_URL" scan-src
-                                git -C scan-src rev-parse HEAD
-                            ''',
-                            returnStdout: true
-                        ).trim()
+                    if (!(params.GIT_COMMIT ==~ /^[0-9a-f]{40}$/)) {
+                        error("GIT_COMMIT is not a valid 40-char SHA: '${params.GIT_COMMIT}'")
                     }
-                    if (!(env.RESOLVED_GIT_COMMIT ==~ /^[0-9a-f]{40}$/)) {
-                        error("Auto-detected commit SHA is invalid: '${env.RESOLVED_GIT_COMMIT}'")
+                    withEnv(["GIT_REPO_URL=${params.GIT_URL}", "GIT_REPO_SHA=${params.GIT_COMMIT}"]) {
+                        sh '''
+                            git clone --depth 1 "$GIT_REPO_URL" scan-src
+                            cd scan-src && git fetch --depth 1 origin "$GIT_REPO_SHA" && git checkout "$GIT_REPO_SHA"
+                            ACTUAL=$(git rev-parse HEAD)
+                            if [ "$ACTUAL" != "$GIT_REPO_SHA" ]; then
+                                printf '[Platform] FATAL: post-clone SHA mismatch: expected %s, got %s\n' "$GIT_REPO_SHA" "$ACTUAL" >&2
+                                exit 1
+                            fi
+                        '''
                     }
-                    // Inject the resolved SHA as a build parameter so the attest listener
-                    // can match this source-scan result to the upstream build's GIT_COMMIT.
-                    currentBuild.rawBuild.replaceAction(new hudson.model.ParametersAction([
-                        new hudson.model.StringParameterValue('GIT_URL',    params.GIT_URL),
-                        new hudson.model.StringParameterValue('GIT_COMMIT', env.RESOLVED_GIT_COMMIT),
-                    ]))
-                    echo "[Platform] Source scan at ${env.RESOLVED_GIT_COMMIT}"
                 }
             }
         }
@@ -182,12 +174,12 @@ pipeline {
     post {
         success {
             script {
-                echo "[Platform] Source scan PASSED for ${params.GIT_URL}@${env.RESOLVED_GIT_COMMIT?.take(7)} — build may proceed"
+                echo "[Platform] Source scan PASSED for ${params.GIT_URL}@${params.GIT_COMMIT?.take(7)} — attest listener will proceed when image scan also completes"
             }
         }
         failure {
             script {
-                echo "[Platform] Source scan FAILED for ${params.GIT_URL}@${env.RESOLVED_GIT_COMMIT?.take(7)} — build listener will refuse attestation for this commit"
+                echo "[Platform] Source scan FAILED for ${params.GIT_URL}@${params.GIT_COMMIT?.take(7)} — attest listener will refuse attestation for this commit"
             }
         }
     }
