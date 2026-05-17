@@ -140,8 +140,8 @@ private void checkCedarPromote(String environment) {
         } catch (ignored) {}
     }
 
-    // Call Cedar sidecar.
-    def cedarUrl = 'https://cedar.platform.tuxgrid.com/authorize'
+    // Call Cedar sidecar. Internal URL — external https fails TLS from build pods (Cloudflare mTLS).
+    def cedarUrl = 'http://platform-cedar-sidecar.platform.svc.cluster.local/authorize'
     def payload  = groovy.json.JsonOutput.toJson([
         principal: "TuxGrid::Pipeline::\"${env.TUXGRID_TEAM_SLUG}/${env.JOB_BASE_NAME}\"",
         action:    'TuxGrid::Action::"Promote"',
