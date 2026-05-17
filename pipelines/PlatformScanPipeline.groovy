@@ -196,6 +196,8 @@ pipeline {
                                     --format json \
                                     --output trivy-repo-result.json \
                                     --db-repository harbor.tuxgrid.com/platform/trivy-db:2 \
+                                    --skip-check-update \
+                                    --timeout 20m \
                                     scan-src/
                             """,
                             returnStatus: true
