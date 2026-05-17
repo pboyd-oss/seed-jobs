@@ -1,0 +1,8 @@
+service:
+  slug: tetragon-forwarder
+  name: tetragon-forwarder
+  desc: "Platform Tetragon forwarder — forwards kernel exec/network events to audit service"
+  git_url: https://github.com/pboyd-oss/platform-tetragon-forwarder.git
+  workload: tetragon-forwarder
+  namespace: kube-system
+  kind: daemonset

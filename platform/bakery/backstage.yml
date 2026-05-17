@@ -1,0 +1,4 @@
+bakery:
+  name: backstage
+  description: "Custom Backstage developer portal image with platform plugins."
+  git_url: https://github.com/pboyd-oss/platform-backstage.git

@@ -1,0 +1,13 @@
+compliance:
+  name: policy-scan
+  description: "Scans platform IAM and Kubernetes policy code (deploy role boundary, SCP, IRSA, Token Service RBAC) with Trivy + Checkov. Trigger on commits to talos-argocd-proxmox."
+  script_path: pipelines/PlatformPolicyScanPipeline.groovy
+  trigger: scm
+  log_keep: 50
+  params:
+    - name: GIT_URL
+      default: "https://github.com/pboyd-oss/talos-argocd-proxmox.git"
+      description: "Platform infrastructure repo"
+    - name: GIT_COMMIT
+      default: HEAD
+      description: "Commit SHA or branch ref to scan"

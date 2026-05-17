@@ -1,0 +1,5 @@
+bakery:
+  name: deploy-sec-base
+  description: "Platform deploy security image — trivy, tfsec, checkov on top of deploy-base."
+  git_url: https://github.com/pboyd-oss/deploy-sec-base.git
+  env_versions: [syft, trivy, tfsec, checkov, python]

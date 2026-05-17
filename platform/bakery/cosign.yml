@@ -1,0 +1,5 @@
+bakery:
+  name: cosign
+  description: "Alpine + cosign sidecar image — used by deploy-sec-base-builder pod template"
+  git_url: https://github.com/pboyd-oss/platform-cosign.git
+  env_versions: [cosign, alpine]

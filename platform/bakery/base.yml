@@ -1,0 +1,4 @@
+bakery:
+  name: base
+  description: "Platform base image — ubuntu:24.04 + apt packages. Parent of deploy-base."
+  git_url: https://github.com/pboyd-oss/platform-base.git

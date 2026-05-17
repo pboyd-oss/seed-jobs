@@ -1,0 +1,8 @@
+service:
+  slug: token-service
+  name: token-service
+  desc: "Platform token service — OIDC-gated STS credential vending"
+  git_url: https://github.com/pboyd-oss/platform-token-service.git
+  workload: platform-token-service
+  namespace: platform
+  kind: deployment

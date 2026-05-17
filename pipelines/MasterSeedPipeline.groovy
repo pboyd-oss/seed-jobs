@@ -36,16 +36,23 @@ pipeline {
         stage('Generate') {
             steps {
                 script {
-                    def clouds    = readYaml(file: 'clouds/cloud-registry.yml')
-                    def versions  = readYaml(file: 'config/platform-versions.yaml').tools
-                    def teamFiles = findFiles(glob: 'teams/*.yml')
-                    def allDsl    = new StringBuilder()
+                    def clouds   = readYaml(file: 'clouds/cloud-registry.yml')
+                    def versions = readYaml(file: 'config/platform-versions.yaml').tools
+                    def allDsl   = new StringBuilder()
 
                     allDsl.append("folder('teams')    { description('Team workspaces') }\n\n")
                     allDsl.append("folder('platform') { description('Platform-controlled CD pipelines — do not modify') }\n\n")
-                    allDsl.append(buildPlatformInfraDsl(versions))
 
-                    teamFiles.each { f ->
+                    allDsl.append(buildPlatformBakeryFolderDsl())
+                    allDsl.append(buildPlatformInfraFolderDsl())
+                    allDsl.append(buildPlatformServicesFolderDsl())
+
+                    findFiles(glob: 'platform/bakery/*.yml').each     { f -> allDsl.append(buildBakeryDsl(readYaml(file: f.path).bakery, versions)) }
+                    findFiles(glob: 'platform/infra/*.yml').each      { f -> allDsl.append(buildInfraDsl(readYaml(file: f.path).infra)) }
+                    findFiles(glob: 'platform/services/*.yml').each   { f -> allDsl.append(buildPlatformServiceDsl(readYaml(file: f.path).service)) }
+                    findFiles(glob: 'platform/compliance/*.yml').each { f -> allDsl.append(buildComplianceDsl(readYaml(file: f.path).compliance)) }
+
+                    findFiles(glob: 'teams/*.yml').each { f ->
                         def team       = readYaml(file: f.path)
                         def t          = team.team
                         def buildCloud = clouds.clouds.find { it.name == t.build_cloud }
@@ -243,336 +250,79 @@ ${envLines}
 """
 }
 
-// Platform-wide jobs — created once, not per-team.
-def buildPlatformInfraDsl(Map versions) {
-    def platformServices = [
-        [
-            slug:      'audit-service',
-            name:      'audit-service',
-            desc:      'Platform audit service — build pipeline security event correlation',
-            gitUrl:    'https://github.com/pboyd-oss/platform-audit-service.git',
-            workload:  'platform-audit-service',
-            namespace: 'platform',
-            kind:      'deployment',
-        ],
-        [
-            slug:      'tetragon-forwarder',
-            name:      'tetragon-forwarder',
-            desc:      'Platform Tetragon forwarder — forwards kernel exec/network events to audit service',
-            gitUrl:    'https://github.com/pboyd-oss/platform-tetragon-forwarder.git',
-            workload:  'tetragon-forwarder',
-            namespace: 'kube-system',
-            kind:      'daemonset',
-        ],
-        [
-            slug:      'token-service',
-            name:      'token-service',
-            desc:      'Platform token service — OIDC-gated STS credential vending',
-            gitUrl:    'https://github.com/pboyd-oss/platform-token-service.git',
-            workload:  'platform-token-service',
-            namespace: 'platform',
-            kind:      'deployment',
-        ],
-        [
-            slug:      'cedar-sidecar',
-            name:      'cedar-sidecar',
-            desc:      'Platform Cedar policy sidecar — evaluates attestation and promotion policies',
-            gitUrl:    'https://github.com/pboyd-oss/platform-cedar.git',
-            workload:  'platform-cedar-sidecar',
-            namespace: 'platform',
-            kind:      'deployment',
-        ],
-        [
-            slug:      'platform-agent',
-            name:      'platform-agent',
-            desc:      'Platform engineering AI agent — LangGraph-powered chat interface for provisioning and operations',
-            gitUrl:    'https://github.com/pboyd-oss/platform-agent.git',
-            workload:  'platform-agent',
-            namespace: 'platform-agent',
-            kind:      'deployment',
-        ],
-    ]
-
-    def servicesDsl = new StringBuilder()
-    servicesDsl.append(buildPlatformServicesFolderDsl())
-    platformServices.each { svc ->
-        servicesDsl.append(buildPlatformServiceDsl(svc))
-    }
-
-    def infra = new StringBuilder()
-    infra.append("""
+private String buildPlatformBakeryFolderDsl() {
+    return """
 folder('platform/bakery') {
     displayName('bakery')
     description('Platform base image build jobs — all images that form the platform image hierarchy.')
-    authorization {
-        permission('hudson.model.Item.Read',      'admin')
-        permission('hudson.model.Item.Read',      'jenkins-operator')
-        permission('hudson.model.Item.Build',     'admin')
-        permission('hudson.model.Item.Build',     'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'admin')
-        permission('hudson.model.Item.Configure', 'admin')
-        permission('hudson.model.Item.Configure', 'jenkins-operator')
-    }
+    ${platformAuthBlock()}
 }
 
-folder('platform/bakery/cosign') {
-    displayName('cosign')
-    description('Alpine + cosign sidecar image — used by deploy-sec-base-builder pod template')
-    authorization {
-        permission('hudson.model.Item.Read',      'admin')
-        permission('hudson.model.Item.Read',      'jenkins-operator')
-        permission('hudson.model.Item.Build',     'admin')
-        permission('hudson.model.Item.Build',     'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'admin')
-        permission('hudson.model.Item.Configure', 'admin')
-        permission('hudson.model.Item.Configure', 'jenkins-operator')
-    }
+"""
 }
 
-pipelineJob('platform/bakery/cosign/build') {
-    displayName('build')
-    description('Builds and pushes harbor.tuxgrid.com/platform/cosign:${versions.cosign} using kaniko.')
-    environmentVariables {
-        env('COSIGN_VERSION', '${versions.cosign}')
-        env('ALPINE_VERSION', '${versions.alpine}')
-    }
-    definition {
-        cpsScm {
-            scm {
-                git {
-                    remote {
-                        url('https://github.com/pboyd-oss/platform-cosign.git')
-                        credentials('git-deploy-key')
-                    }
-                    branch('main')
-                }
-            }
-            scriptPath('Jenkinsfile')
-        }
-    }
-    triggers { scm('H/5 * * * *') }
-    logRotator(-1, 20)
-}
-
-folder('platform/bakery/base') {
-    displayName('base')
-    description('Platform base image — ubuntu:24.04 + apt packages. Parent of deploy-base.')
-    authorization {
-        permission('hudson.model.Item.Read',      'admin')
-        permission('hudson.model.Item.Read',      'jenkins-operator')
-        permission('hudson.model.Item.Build',     'admin')
-        permission('hudson.model.Item.Build',     'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'admin')
-        permission('hudson.model.Item.Configure', 'admin')
-        permission('hudson.model.Item.Configure', 'jenkins-operator')
-    }
-}
-
-pipelineJob('platform/bakery/base/build') {
-    displayName('build')
-    description('Builds and pushes harbor.tuxgrid.com/platform/base using kaniko.')
-    definition {
-        cpsScm {
-            scm {
-                git {
-                    remote {
-                        url('https://github.com/pboyd-oss/platform-base.git')
-                        credentials('git-deploy-key')
-                    }
-                    branch('main')
-                }
-            }
-            scriptPath('Jenkinsfile')
-        }
-    }
-    triggers { scm('H/5 * * * *') }
-    logRotator(-1, 20)
-}
-
-folder('platform/bakery/build-base') {
-    displayName('build-base')
-    description('Platform build base image — make, gcc, build-essential, zip, unzip. For team build steps.')
-    authorization {
-        permission('hudson.model.Item.Read',      'admin')
-        permission('hudson.model.Item.Read',      'jenkins-operator')
-        permission('hudson.model.Item.Build',     'admin')
-        permission('hudson.model.Item.Build',     'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'admin')
-        permission('hudson.model.Item.Configure', 'admin')
-        permission('hudson.model.Item.Configure', 'jenkins-operator')
-    }
-}
-
-pipelineJob('platform/bakery/build-base/build') {
-    displayName('build')
-    description('Builds and pushes harbor.tuxgrid.com/platform/build-base using kaniko.')
-    definition {
-        cpsScm {
-            scm {
-                git {
-                    remote {
-                        url('https://github.com/pboyd-oss/platform-build-base.git')
-                        credentials('git-deploy-key')
-                    }
-                    branch('main')
-                }
-            }
-            scriptPath('Jenkinsfile')
-        }
-    }
-    triggers { scm('H/5 * * * *') }
-    logRotator(-1, 20)
-}
-
-folder('platform/bakery/deploy-base') {
-    displayName('deploy-base')
-    description('Platform deploy base image — cosign, skaffold, terraform. Parent of deploy-sec-base.')
-    authorization {
-        permission('hudson.model.Item.Read',      'admin')
-        permission('hudson.model.Item.Read',      'jenkins-operator')
-        permission('hudson.model.Item.Build',     'admin')
-        permission('hudson.model.Item.Build',     'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'admin')
-        permission('hudson.model.Item.Configure', 'admin')
-        permission('hudson.model.Item.Configure', 'jenkins-operator')
-    }
-}
-
-pipelineJob('platform/bakery/deploy-base/build') {
-    displayName('build')
-    description('Builds and pushes harbor.tuxgrid.com/platform/deploy-base using kaniko.')
-    environmentVariables {
-        env('COSIGN_VERSION',    '${versions.cosign}')
-        env('SKAFFOLD_VERSION',  '${versions.skaffold}')
-        env('K8S_TOOLS_VERSION', '${versions.k8s_tools}')
-        env('TERRAFORM_VERSION', '${versions.terraform}')
-    }
-    definition {
-        cpsScm {
-            scm {
-                git {
-                    remote {
-                        url('https://github.com/pboyd-oss/platform-deploy-base.git')
-                        credentials('git-deploy-key')
-                    }
-                    branch('main')
-                }
-            }
-            scriptPath('Jenkinsfile')
-        }
-    }
-    triggers { scm('H/5 * * * *') }
-    logRotator(-1, 20)
-}
-
-folder('platform/bakery/deploy-sec-base') {
-    displayName('deploy-sec-base')
-    description('Platform deploy security image — trivy, tfsec, checkov on top of deploy-base.')
-    authorization {
-        permission('hudson.model.Item.Read',      'admin')
-        permission('hudson.model.Item.Read',      'jenkins-operator')
-        permission('hudson.model.Item.Build',     'admin')
-        permission('hudson.model.Item.Build',     'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'admin')
-        permission('hudson.model.Item.Configure', 'admin')
-        permission('hudson.model.Item.Configure', 'jenkins-operator')
-    }
-}
-
-pipelineJob('platform/bakery/deploy-sec-base/build') {
-    displayName('build')
-    description('Builds and pushes harbor.tuxgrid.com/platform/deploy-sec-base using kaniko.')
-    environmentVariables {
-        env('SYFT_VERSION',    '${versions.syft}')
-        env('TRIVY_VERSION',   '${versions.trivy}')
-        env('TFSEC_VERSION',   '${versions.tfsec}')
-        env('CHECKOV_VERSION', '${versions.checkov}')
-        env('PYTHON_VERSION',  '${versions.python}')
-    }
-    definition {
-        cpsScm {
-            scm {
-                git {
-                    remote {
-                        url('https://github.com/pboyd-oss/deploy-sec-base.git')
-                        credentials('git-deploy-key')
-                    }
-                    branch('main')
-                }
-            }
-            scriptPath('Jenkinsfile')
-        }
-    }
-    triggers { scm('H/5 * * * *') }
-    logRotator(-1, 20)
-}
-
-folder('platform/bakery/backstage') {
-    displayName('backstage')
-    description('Custom Backstage developer portal image with platform plugins.')
-    authorization {
-        permission('hudson.model.Item.Read',      'admin')
-        permission('hudson.model.Item.Read',      'jenkins-operator')
-        permission('hudson.model.Item.Build',     'admin')
-        permission('hudson.model.Item.Build',     'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'admin')
-        permission('hudson.model.Item.Configure', 'admin')
-        permission('hudson.model.Item.Configure', 'jenkins-operator')
-    }
-}
-
-pipelineJob('platform/bakery/backstage/build') {
-    displayName('build')
-    description('Builds and pushes harbor.tuxgrid.com/platform/backstage using kaniko.')
-    definition {
-        cpsScm {
-            scm {
-                git {
-                    remote {
-                        url('https://github.com/pboyd-oss/platform-backstage.git')
-                        credentials('git-deploy-key')
-                    }
-                    branch('main')
-                }
-            }
-            scriptPath('Jenkinsfile')
-        }
-    }
-    triggers { scm('H/5 * * * *') }
-    logRotator(-1, 20)
-}
-
+private String buildPlatformInfraFolderDsl() {
+    return """
 folder('platform/infra') {
     displayName('infra')
     description('Platform-controlled infrastructure pipelines — Terraform GitOps.')
-    authorization {
-        permission('hudson.model.Item.Read',      'admin')
-        permission('hudson.model.Item.Read',      'jenkins-operator')
-        permission('hudson.model.Item.Build',     'admin')
-        permission('hudson.model.Item.Build',     'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'admin')
-        permission('hudson.model.Item.Configure', 'admin')
-        permission('hudson.model.Item.Configure', 'jenkins-operator')
-    }
+    ${platformAuthBlock()}
 }
 
-multibranchPipelineJob('platform/infra/terraform') {
-    displayName('terraform')
-    description('Terraform GitOps pipeline. Runs plan on PRs (posts comment), applies on merge to main.')
+"""
+}
+
+def buildBakeryDsl(Map bakery, Map versions) {
+    def auth     = platformAuthBlock()
+    def envLines = bakery.env_versions
+        ? bakery.env_versions.collect { k ->
+            "        env('${k.toUpperCase()}_VERSION', '${versions[k]}')"
+          }.join('\n')
+        : ''
+    def envSection = envLines ? "\n    environmentVariables {\n${envLines}\n    }" : ''
+
+    return """
+folder('platform/bakery/${bakery.name}') {
+    displayName('${bakery.name}')
+    description('${bakery.description}')
+    ${auth}
+}
+
+pipelineJob('platform/bakery/${bakery.name}/build') {
+    displayName('build')
+    description('Builds and pushes harbor.tuxgrid.com/platform/${bakery.name} using kaniko.')${envSection}
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('${bakery.git_url}')
+                        credentials('git-deploy-key')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('Jenkinsfile')
+        }
+    }
+    triggers { scm('H/5 * * * *') }
+    logRotator(-1, 20)
+}
+
+"""
+}
+
+def buildInfraDsl(Map infra) {
+    return """
+multibranchPipelineJob('platform/infra/${infra.name}') {
+    displayName('${infra.name}')
+    description('${infra.description}')
     branchSources {
         github {
-            id('platform-infra-terraform')
-            repoOwner('pboyd-oss')
-            repository('infra-terraform')
-            scanCredentialsId('github-token')
+            id('platform-infra-${infra.name}')
+            repoOwner('${infra.repo_owner}')
+            repository('${infra.repository}')
+            scanCredentialsId('${infra.credentials}')
             buildOriginBranch(true)
             buildOriginBranchWithPR(false)
             buildOriginPRMerge(true)
@@ -593,53 +343,36 @@ multibranchPipelineJob('platform/infra/terraform') {
         discardOldItems { numToKeep(10) }
     }
 }
-""")
-    infra.append(servicesDsl)
-    infra.append("""
-pipelineJob('platform/policy-scan') {
-    displayName('policy-scan')
-    description('Scans platform IAM and Kubernetes policy code (deploy role boundary, SCP, IRSA, Token Service RBAC) with Trivy + Checkov. Trigger on commits to talos-argocd-proxmox.')
-    authorization {
-        permission('hudson.model.Item.Read',      'admin')
-        permission('hudson.model.Item.Read',      'jenkins-operator')
-        permission('hudson.model.Item.Build',     'admin')
-        permission('hudson.model.Item.Build',     'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'admin')
-        permission('hudson.model.Item.Configure', 'admin')
-        permission('hudson.model.Item.Configure', 'jenkins-operator')
-    }
-    parameters {
-        stringParam('GIT_URL',    'https://github.com/pboyd-oss/talos-argocd-proxmox.git', 'Platform infrastructure repo')
-        stringParam('GIT_COMMIT', 'HEAD', 'Commit SHA or branch ref to scan')
-    }
-    definition {
-        cpsScm {
-            scm {
-                git {
-                    remote {
-                        url('https://github.com/pboyd-oss/seed-jobs.git')
-                        credentials('git-deploy-key')
-                    }
-                    branch('main')
-                }
-            }
-            scriptPath('pipelines/PlatformPolicyScanPipeline.groovy')
-        }
-    }
-    triggers { scm('H/5 * * * *') }
-    logRotator(-1, 50)
+
+"""
 }
 
-pipelineJob('platform/audit-compliance') {
-    displayName('audit-compliance')
-    description('Daily Cedar AuditCompliance scan — finds team pipelines that are stale, abandoned, or missing scan/v1 attestations. Marks UNSTABLE on gaps, does not block builds.')
-    authorization {
+def buildComplianceDsl(Map comp) {
+    def auth = comp.auth == 'admin_only'
+        ? """authorization {
         permission('hudson.model.Item.Read',   'admin')
         permission('hudson.model.Item.Build',  'admin')
         permission('hudson.model.Item.Cancel', 'admin')
+    }"""
+        : platformAuthBlock()
+
+    def paramsBlock = comp.params
+        ? """    parameters {
+${comp.params.collect { p -> "        stringParam('${p.name}', '${p['default']}', '${p.description}')" }.join('\n')}
     }
-    definition {
+"""
+        : ''
+
+    def triggerBlock = comp.trigger == 'cron'
+        ? "\n    properties { pipelineTriggers { triggers { cron { spec('${comp.cron_spec}') } } } }"
+        : "\n    triggers { scm('H/5 * * * *') }"
+
+    return """
+pipelineJob('platform/${comp.name}') {
+    displayName('${comp.name}')
+    description('${comp.description}')
+    ${auth}
+${paramsBlock}    definition {
         cpsScm {
             scm {
                 git {
@@ -650,19 +383,13 @@ pipelineJob('platform/audit-compliance') {
                     branch('main')
                 }
             }
-            scriptPath('pipelines/PlatformAuditCompliancePipeline.groovy')
+            scriptPath('${comp.script_path}')
         }
-    }
-    properties {
-        pipelineTriggers {
-            triggers { cron { spec('H 6 * * *') } }
-        }
-    }
-    logRotator(-1, 90)
+    }${triggerBlock}
+    logRotator(-1, ${comp.log_keep ?: 50})
 }
 
-""")
-    return infra.toString()
+"""
 }
 
 def buildPlatformReleaseDsl(Map t, Map envVars) {
@@ -917,7 +644,7 @@ pipelineJob('${buildJob}') {
             scm {
                 git {
                     remote {
-                        url('${svc.gitUrl}')
+                        url('${svc.git_url}')
                         credentials('git-deploy-key')
                     }
                     branch('main')
@@ -942,7 +669,7 @@ pipelineJob('${scanJob}') {
     }
     environmentVariables {
         env('SERVICE_BUILD_JOB', '${buildJob}')
-        env('SERVICE_GIT_URL',   '${svc.gitUrl}')
+        env('SERVICE_GIT_URL',   '${svc.git_url}')
     }
     definition {
         cpsScm {

@@ -1,0 +1,8 @@
+service:
+  slug: cedar-sidecar
+  name: cedar-sidecar
+  desc: "Platform Cedar policy sidecar — evaluates attestation and promotion policies"
+  git_url: https://github.com/pboyd-oss/platform-cedar.git
+  workload: platform-cedar-sidecar
+  namespace: platform
+  kind: deployment

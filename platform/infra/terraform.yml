@@ -1,0 +1,6 @@
+infra:
+  name: terraform
+  description: "Terraform GitOps pipeline. Runs plan on PRs (posts comment), applies on merge to main."
+  repo_owner: pboyd-oss
+  repository: infra-terraform
+  credentials: github-token

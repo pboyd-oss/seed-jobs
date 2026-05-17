@@ -1,0 +1,8 @@
+compliance:
+  name: audit-compliance
+  description: "Daily Cedar AuditCompliance scan — finds team pipelines that are stale, abandoned, or missing scan/v1 attestations. Marks UNSTABLE on gaps, does not block builds."
+  script_path: pipelines/PlatformAuditCompliancePipeline.groovy
+  trigger: cron
+  cron_spec: "H 6 * * *"
+  auth: admin_only
+  log_keep: 90
