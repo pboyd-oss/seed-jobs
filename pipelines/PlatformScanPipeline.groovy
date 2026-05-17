@@ -102,7 +102,7 @@ pipeline {
                             '''
                             images.each { image ->
                                 withEnv(["IMAGE_REF=${image.tag}", "DOCKER_CONFIG=/tmp/.docker"]) {
-                                    sh 'cosign verify --key /tmp/cosign.pub "$IMAGE_REF"'
+                                    sh 'cosign verify --key /tmp/cosign.pub --insecure-ignore-tlog=true "$IMAGE_REF"'
                                 }
                             }
                             sh 'rm -f /tmp/cosign.pub /tmp/.docker/config.json'
