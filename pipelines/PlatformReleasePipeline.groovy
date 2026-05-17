@@ -182,6 +182,7 @@ private void checkCedarPromote(String environment) {
 }
 
 private void validateJobScope(String upstreamJob) {
+    if (upstreamJob.startsWith('platform/')) return
     def allowedRoot = "teams/${env.TUXGRID_TEAM_SLUG}/"
     if (!upstreamJob.startsWith(allowedRoot)) {
         error("Release refused: '${upstreamJob}' is not within this team's folder '${allowedRoot}'")

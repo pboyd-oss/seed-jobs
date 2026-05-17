@@ -46,18 +46,31 @@ pipeline {
                     copyArtifacts(
                         projectName:          params.UPSTREAM_JOB,
                         selector:             specific(params.UPSTREAM_BUILD),
-                        filter:               'artifacts.json',
+                        filter:               'artifacts.json,build-info.json',
                         fingerprintArtifacts: true
                     )
                     def images = readJSON(file: 'artifacts.json').builds
                     if (!images) error('artifacts.json contains no builds')
 
+                    // Resolve GIT_URL and GIT_COMMIT from params or build-info.json.
+                    // build-info.json is archived by platformArchive() so platform service
+                    // builds supply it automatically; team builds pass them as params.
+                    def resolvedGitUrl    = params.GIT_URL    ?: ''
+                    def resolvedGitCommit = params.GIT_COMMIT ?: ''
+                    if ((!resolvedGitUrl || !resolvedGitCommit) && fileExists('build-info.json')) {
+                        def buildInfo      = readJSON(file: 'build-info.json')
+                        resolvedGitUrl    = resolvedGitUrl    ?: (buildInfo.gitUrl    ?: '')
+                        resolvedGitCommit = resolvedGitCommit ?: (buildInfo.gitCommit ?: '')
+                    }
+                    env.SCAN_GIT_URL    = resolvedGitUrl
+                    env.SCAN_GIT_COMMIT = resolvedGitCommit
+
                     // Clone once — shared workspace means Trivy Repo and Checkov both
                     // read from scan-src/ without a second clone.
-                    if (!(params.GIT_COMMIT ==~ /^[0-9a-f]{40}$/)) {
-                        error("GIT_COMMIT is not a valid 40-char SHA: '${params.GIT_COMMIT}'")
+                    if (!(env.SCAN_GIT_COMMIT ==~ /^[0-9a-f]{40}$/)) {
+                        error("GIT_COMMIT is not a valid 40-char SHA: '${env.SCAN_GIT_COMMIT}'")
                     }
-                    withEnv(["GIT_REPO_URL=${params.GIT_URL}", "GIT_REPO_SHA=${params.GIT_COMMIT}"]) {
+                    withEnv(["GIT_REPO_URL=${env.SCAN_GIT_URL}", "GIT_REPO_SHA=${env.SCAN_GIT_COMMIT}"]) {
                         sh '''
                             git clone --depth 1 "$GIT_REPO_URL" scan-src
                             cd scan-src && git checkout "$GIT_REPO_SHA"
@@ -496,7 +509,7 @@ pipeline {
                     def parts    = params.UPSTREAM_JOB.split('/')
                     def teamSlug = parts[1]
                     def repoName = parts[2]
-                    def gitShort = params.GIT_COMMIT.take(7)
+                    def gitShort = env.SCAN_GIT_COMMIT.take(7)
                     def envSlug  = params.ENVIRONMENT
 
                     withCredentials([usernamePassword(
@@ -614,8 +627,8 @@ pipeline {
                         job:         params.UPSTREAM_JOB,
                         build:       params.UPSTREAM_BUILD,
                         timestamp:   timestamp,
-                        git_url:     params.GIT_URL,
-                        git_commit:  params.GIT_COMMIT,
+                        git_url:     env.SCAN_GIT_URL,
+                        git_commit:  env.SCAN_GIT_COMMIT,
                         environment: params.ENVIRONMENT ?: '',
                         trivy_image: [
                             passed:         true,

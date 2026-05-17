@@ -245,7 +245,62 @@ ${envLines}
 
 // Platform-wide jobs — created once, not per-team.
 def buildPlatformInfraDsl(Map versions) {
-    return """
+    def platformServices = [
+        [
+            slug:      'audit-service',
+            name:      'audit-service',
+            desc:      'Platform audit service — build pipeline security event correlation',
+            gitUrl:    'https://github.com/pboyd-oss/platform-audit-service.git',
+            workload:  'platform-audit-service',
+            namespace: 'platform',
+            kind:      'deployment',
+        ],
+        [
+            slug:      'tetragon-forwarder',
+            name:      'tetragon-forwarder',
+            desc:      'Platform Tetragon forwarder — forwards kernel exec/network events to audit service',
+            gitUrl:    'https://github.com/pboyd-oss/platform-tetragon-forwarder.git',
+            workload:  'tetragon-forwarder',
+            namespace: 'kube-system',
+            kind:      'daemonset',
+        ],
+        [
+            slug:      'token-service',
+            name:      'token-service',
+            desc:      'Platform token service — OIDC-gated STS credential vending',
+            gitUrl:    'https://github.com/pboyd-oss/platform-token-service.git',
+            workload:  'platform-token-service',
+            namespace: 'platform',
+            kind:      'deployment',
+        ],
+        [
+            slug:      'cedar-sidecar',
+            name:      'cedar-sidecar',
+            desc:      'Platform Cedar policy sidecar — evaluates attestation and promotion policies',
+            gitUrl:    'https://github.com/pboyd-oss/platform-cedar.git',
+            workload:  'platform-cedar-sidecar',
+            namespace: 'platform',
+            kind:      'deployment',
+        ],
+        [
+            slug:      'platform-agent',
+            name:      'platform-agent',
+            desc:      'Platform engineering AI agent — LangGraph-powered chat interface for provisioning and operations',
+            gitUrl:    'https://github.com/pboyd-oss/platform-agent.git',
+            workload:  'platform-agent',
+            namespace: 'platform-agent',
+            kind:      'deployment',
+        ],
+    ]
+
+    def servicesDsl = new StringBuilder()
+    servicesDsl.append(buildPlatformServicesFolderDsl())
+    platformServices.each { svc ->
+        servicesDsl.append(buildPlatformServiceDsl(svc))
+    }
+
+    def infra = new StringBuilder()
+    infra.append("""
 folder('platform/bakery') {
     displayName('bakery')
     description('Platform base image build jobs — all images that form the platform image hierarchy.')
@@ -538,197 +593,9 @@ multibranchPipelineJob('platform/infra/terraform') {
         discardOldItems { numToKeep(10) }
     }
 }
-
-folder('platform/services') {
-    displayName('services')
-    description('Platform service build jobs — audit-service, tetragon-forwarder, token-service.')
-    authorization {
-        permission('hudson.model.Item.Read',      'admin')
-        permission('hudson.model.Item.Read',      'jenkins-operator')
-        permission('hudson.model.Item.Build',     'admin')
-        permission('hudson.model.Item.Build',     'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'admin')
-        permission('hudson.model.Item.Configure', 'admin')
-        permission('hudson.model.Item.Configure', 'jenkins-operator')
-    }
-}
-
-folder('platform/services/audit-service') {
-    displayName('audit-service')
-    description('Platform audit service — build pipeline security event correlation')
-    authorization {
-        permission('hudson.model.Item.Read',      'admin')
-        permission('hudson.model.Item.Read',      'jenkins-operator')
-        permission('hudson.model.Item.Build',     'admin')
-        permission('hudson.model.Item.Build',     'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'admin')
-        permission('hudson.model.Item.Configure', 'admin')
-        permission('hudson.model.Item.Configure', 'jenkins-operator')
-    }
-}
-
-pipelineJob('platform/services/audit-service/build') {
-    displayName('build')
-    description('Builds and pushes harbor.tuxgrid.com/platform/audit-service using kaniko.')
-    definition {
-        cpsScm {
-            scm {
-                git {
-                    remote {
-                        url('https://github.com/pboyd-oss/platform-audit-service.git')
-                    }
-                    branch('main')
-                }
-            }
-            scriptPath('Jenkinsfile')
-        }
-    }
-    triggers { scm('H/5 * * * *') }
-    logRotator(-1, 20)
-}
-
-folder('platform/services/tetragon-forwarder') {
-    displayName('tetragon-forwarder')
-    description('Platform Tetragon forwarder — forwards kernel exec/network events to audit service')
-    authorization {
-        permission('hudson.model.Item.Read',      'admin')
-        permission('hudson.model.Item.Read',      'jenkins-operator')
-        permission('hudson.model.Item.Build',     'admin')
-        permission('hudson.model.Item.Build',     'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'admin')
-        permission('hudson.model.Item.Configure', 'admin')
-        permission('hudson.model.Item.Configure', 'jenkins-operator')
-    }
-}
-
-pipelineJob('platform/services/tetragon-forwarder/build') {
-    displayName('build')
-    description('Builds and pushes harbor.tuxgrid.com/platform/tetragon-forwarder using kaniko.')
-    definition {
-        cpsScm {
-            scm {
-                git {
-                    remote {
-                        url('https://github.com/pboyd-oss/platform-tetragon-forwarder.git')
-                    }
-                    branch('main')
-                }
-            }
-            scriptPath('Jenkinsfile')
-        }
-    }
-    triggers { scm('H/5 * * * *') }
-    logRotator(-1, 20)
-}
-
-folder('platform/services/token-service') {
-    displayName('token-service')
-    description('Platform token service — OIDC-gated STS credential vending')
-    authorization {
-        permission('hudson.model.Item.Read',      'admin')
-        permission('hudson.model.Item.Read',      'jenkins-operator')
-        permission('hudson.model.Item.Build',     'admin')
-        permission('hudson.model.Item.Build',     'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'admin')
-        permission('hudson.model.Item.Configure', 'admin')
-        permission('hudson.model.Item.Configure', 'jenkins-operator')
-    }
-}
-
-pipelineJob('platform/services/token-service/build') {
-    displayName('build')
-    description('Builds and pushes harbor.tuxgrid.com/platform/token-service using kaniko.')
-    definition {
-        cpsScm {
-            scm {
-                git {
-                    remote {
-                        url('https://github.com/pboyd-oss/platform-token-service.git')
-                    }
-                    branch('main')
-                }
-            }
-            scriptPath('Jenkinsfile')
-        }
-    }
-    triggers { scm('H/5 * * * *') }
-    logRotator(-1, 20)
-}
-
-folder('platform/services/cedar-sidecar') {
-    displayName('cedar-sidecar')
-    description('Platform Cedar policy sidecar — evaluates attestation and promotion policies')
-    authorization {
-        permission('hudson.model.Item.Read',      'admin')
-        permission('hudson.model.Item.Read',      'jenkins-operator')
-        permission('hudson.model.Item.Build',     'admin')
-        permission('hudson.model.Item.Build',     'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'admin')
-        permission('hudson.model.Item.Configure', 'admin')
-        permission('hudson.model.Item.Configure', 'jenkins-operator')
-    }
-}
-
-pipelineJob('platform/services/cedar-sidecar/build') {
-    displayName('build')
-    description('Builds and pushes harbor.tuxgrid.com/platform/cedar-sidecar using kaniko.')
-    definition {
-        cpsScm {
-            scm {
-                git {
-                    remote {
-                        url('https://github.com/pboyd-oss/platform-cedar.git')
-                    }
-                    branch('main')
-                }
-            }
-            scriptPath('Jenkinsfile')
-        }
-    }
-    triggers { scm('H/5 * * * *') }
-    logRotator(-1, 20)
-}
-
-folder('platform/services/platform-agent') {
-    displayName('platform-agent')
-    description('Platform engineering AI agent — LangGraph-powered chat interface for provisioning and operations')
-    authorization {
-        permission('hudson.model.Item.Read',      'admin')
-        permission('hudson.model.Item.Read',      'jenkins-operator')
-        permission('hudson.model.Item.Build',     'admin')
-        permission('hudson.model.Item.Build',     'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'jenkins-operator')
-        permission('hudson.model.Item.Cancel',    'admin')
-        permission('hudson.model.Item.Configure', 'admin')
-        permission('hudson.model.Item.Configure', 'jenkins-operator')
-    }
-}
-
-pipelineJob('platform/services/platform-agent/build') {
-    displayName('build')
-    description('Builds and pushes harbor.tuxgrid.com/platform/platform-agent using kaniko.')
-    definition {
-        cpsScm {
-            scm {
-                git {
-                    remote {
-                        url('https://github.com/pboyd-oss/platform-agent.git')
-                    }
-                    branch('main')
-                }
-            }
-            scriptPath('Jenkinsfile')
-        }
-    }
-    triggers { scm('H/5 * * * *') }
-    logRotator(-1, 20)
-}
-
+""")
+    infra.append(servicesDsl)
+    infra.append("""
 pipelineJob('platform/policy-scan') {
     displayName('policy-scan')
     description('Scans platform IAM and Kubernetes policy code (deploy role boundary, SCP, IRSA, Token Service RBAC) with Trivy + Checkov. Trigger on commits to talos-argocd-proxmox.')
@@ -794,7 +661,8 @@ pipelineJob('platform/audit-compliance') {
     logRotator(-1, 90)
 }
 
-"""
+""")
+    return infra.toString()
 }
 
 def buildPlatformReleaseDsl(Map t, Map envVars) {
@@ -1000,4 +868,195 @@ pipelineJob('${repoPath}/source-scan') {
     }
 
     return dsl.toString()
+}
+
+private String platformAuthBlock() {
+    return """authorization {
+        permission('hudson.model.Item.Read',      'admin')
+        permission('hudson.model.Item.Read',      'jenkins-operator')
+        permission('hudson.model.Item.Build',     'admin')
+        permission('hudson.model.Item.Build',     'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'jenkins-operator')
+        permission('hudson.model.Item.Cancel',    'admin')
+        permission('hudson.model.Item.Configure', 'admin')
+        permission('hudson.model.Item.Configure', 'jenkins-operator')
+    }"""
+}
+
+private String buildPlatformServicesFolderDsl() {
+    return """
+folder('platform/services') {
+    displayName('services')
+    description('Platform service pipelines — build, scan, deploy, release.')
+    ${platformAuthBlock()}
+}
+
+"""
+}
+
+private String buildPlatformServiceDsl(Map svc) {
+    def auth       = platformAuthBlock()
+    def buildJob   = "platform/services/${svc.slug}/build"
+    def scanJob    = "platform/services/${svc.slug}/scan"
+    def deployJob  = "platform/services/${svc.slug}/deploy"
+    def releaseJob = "platform/services/${svc.slug}/release"
+    def pipeJob    = "platform/services/${svc.slug}/pipeline"
+
+    return """
+folder('platform/services/${svc.slug}') {
+    displayName('${svc.name}')
+    description('${svc.desc}')
+    ${auth}
+}
+
+pipelineJob('${buildJob}') {
+    displayName('build')
+    description('Builds and signs harbor.tuxgrid.com/platform/${svc.slug}.')
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('${svc.gitUrl}')
+                        credentials('git-deploy-key')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('Jenkinsfile')
+        }
+    }
+    triggers { scm('H/5 * * * *') }
+    logRotator(-1, 20)
+}
+
+pipelineJob('${scanJob}') {
+    displayName('scan')
+    description('Trivy + Checkov + render + scan/v1 attestation for ${svc.slug}.')
+    parameters {
+        stringParam('UPSTREAM_JOB',   '${buildJob}', 'Build job path that produced artifacts.json')
+        stringParam('UPSTREAM_BUILD', 'lastSuccessful', 'Build number or lastSuccessful')
+        stringParam('GIT_URL',        '', 'Override: git URL (read from build-info.json when empty)')
+        stringParam('GIT_COMMIT',     '', 'Override: git commit SHA (read from build-info.json when empty)')
+        stringParam('ENVIRONMENT',    '', 'Target environment for render + plan (optional)')
+    }
+    environmentVariables {
+        env('SERVICE_BUILD_JOB', '${buildJob}')
+        env('SERVICE_GIT_URL',   '${svc.gitUrl}')
+    }
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://github.com/pboyd-oss/seed-jobs.git')
+                        credentials('git-deploy-key')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('pipelines/PlatformScanPipeline.groovy')
+        }
+    }
+    logRotator(-1, 30)
+}
+
+pipelineJob('${deployJob}') {
+    displayName('deploy')
+    description('Verify sig + provenance then apply to cluster for ${svc.slug}. No scan/v1 required.')
+    parameters {
+        stringParam('UPSTREAM_JOB',   '${buildJob}', 'Build job path that produced artifacts.json')
+        stringParam('UPSTREAM_BUILD', 'lastSuccessful', 'Build number or lastSuccessful')
+    }
+    environmentVariables {
+        env('SERVICE_BUILD_JOB', '${buildJob}')
+        env('SERVICE_WORKLOAD',  '${svc.workload}')
+        env('SERVICE_NAMESPACE', '${svc.namespace}')
+        env('SERVICE_KIND',      '${svc.kind}')
+    }
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://github.com/pboyd-oss/seed-jobs.git')
+                        credentials('git-deploy-key')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('pipelines/PlatformDeployPipeline.groovy')
+        }
+    }
+    logRotator(-1, 30)
+}
+
+pipelineJob('${releaseJob}') {
+    displayName('release')
+    description('Full release gate for ${svc.slug}: scan/v1 + Cedar + sha256 verify + apply.')
+    parameters {
+        stringParam('UPSTREAM_JOB',   '${buildJob}', 'Build job path that produced artifacts.json')
+        stringParam('UPSTREAM_BUILD', 'lastSuccessful', 'Build number or lastSuccessful')
+        stringParam('ENVIRONMENT',    'dev', 'Target environment (must match scan/v1 predicate)')
+    }
+    environmentVariables {
+        env('SERVICE_BUILD_JOB',          '${buildJob}')
+        env('TUXGRID_ENV_DEV_CLOUD',      'kubernetes')
+        env('TUXGRID_ENV_DEV_NAMESPACE',  '${svc.namespace}')
+        env('TUXGRID_ENV_PROD_CLOUD',     'kubernetes')
+        env('TUXGRID_ENV_PROD_NAMESPACE', '${svc.namespace}')
+    }
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://github.com/pboyd-oss/seed-jobs.git')
+                        credentials('git-deploy-key')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('pipelines/PlatformReleasePipeline.groovy')
+        }
+    }
+    logRotator(-1, 30)
+}
+
+pipelineJob('${pipeJob}') {
+    displayName('pipeline')
+    description('Wrapper for ${svc.slug}: chains build → scan → deploy → release.')
+    parameters {
+        booleanParam('RUN_BUILD',   true,  'Run the build pipeline')
+        booleanParam('RUN_SCAN',    true,  'Run the scan pipeline')
+        booleanParam('RUN_DEPLOY',  true,  'Deploy to cluster')
+        booleanParam('RUN_RELEASE', false, 'Run full release (scan/v1 + Cedar gate)')
+        stringParam('UPSTREAM_BUILD', 'lastSuccessful', 'Build number when RUN_BUILD=false')
+        stringParam('ENVIRONMENT',    'dev',             'Target environment for scan and release')
+    }
+    environmentVariables {
+        env('SERVICE_BUILD_JOB',   '${buildJob}')
+        env('SERVICE_SCAN_JOB',    '${scanJob}')
+        env('SERVICE_DEPLOY_JOB',  '${deployJob}')
+        env('SERVICE_RELEASE_JOB', '${releaseJob}')
+        env('SERVICE_GIT_URL',     '${svc.gitUrl}')
+    }
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://github.com/pboyd-oss/seed-jobs.git')
+                        credentials('git-deploy-key')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('pipelines/PlatformServicePipeline.groovy')
+        }
+    }
+    logRotator(-1, 30)
+}
+
+"""
 }
