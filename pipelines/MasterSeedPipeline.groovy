@@ -669,7 +669,7 @@ pipelineJob('${scanJob}') {
     }
     environmentVariables {
         env('SERVICE_BUILD_JOB', '${buildJob}')
-        env('SERVICE_GIT_URL',   '${svc.git_url}')
+        env('SERVICE_GIT_URL',   '${svc.gitUrl}')
     }
     definition {
         cpsScm {
@@ -700,6 +700,7 @@ pipelineJob('${deployJob}') {
         env('SERVICE_WORKLOAD',  '${svc.workload}')
         env('SERVICE_NAMESPACE', '${svc.namespace}')
         env('SERVICE_KIND',      '${svc.kind}')
+        env('SERVICE_GIT_URL',   '${svc.gitUrl}')
     }
     definition {
         cpsScm {
