@@ -558,7 +558,7 @@ folder('${repoPath}') {
 
 pipelineJob('${repoPath}/source-scan') {
     displayName('source-scan')
-    description('Platform source scan for ${repo.name}. Runs tfsec, Checkov, and Trivy secrets at a pinned commit. Teams call this as a blocking step before building.')
+    description('Platform source scan for ${repo.name}. Clones at HEAD, auto-detects commit SHA, runs Trivy secrets, tfsec, and Checkov. Call with no parameters before building.')
     authorization {
         ${teamReadBuild}
         permission('hudson.model.Item.Configure', 'admin')
@@ -571,8 +571,7 @@ pipelineJob('${repoPath}/source-scan') {
         permission('hudson.model.Item.Cancel',    'admin')
     }
     parameters {
-        stringParam('GIT_URL',    '${repo.url}', 'Repository URL to scan')
-        stringParam('GIT_COMMIT', '',            'Exact 40-char commit SHA to scan')
+        stringParam('GIT_URL', '${repo.url}', 'Repository URL to scan (pre-populated)')
     }
     definition {
         cpsScm {
