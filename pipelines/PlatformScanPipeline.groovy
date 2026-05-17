@@ -97,15 +97,15 @@ pipeline {
                             sh '''
                                 printf '%s' "$COSIGN_PUBLIC_KEY" > /tmp/cosign.pub
                                 AUTH=$(printf '%s:%s' "$HARBOR_USER" "$HARBOR_PASS" | base64 | tr -d '\\n')
-                                mkdir -p ~/.docker
-                                printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > ~/.docker/config.json
+                                mkdir -p /tmp/.docker
+                                printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > /tmp/.docker/config.json
                             '''
                             images.each { image ->
-                                withEnv(["IMAGE_REF=${image.tag}"]) {
+                                withEnv(["IMAGE_REF=${image.tag}", "DOCKER_CONFIG=/tmp/.docker"]) {
                                     sh 'cosign verify --key /tmp/cosign.pub "$IMAGE_REF"'
                                 }
                             }
-                            sh 'rm -f /tmp/cosign.pub ~/.docker/config.json'
+                            sh 'rm -f /tmp/cosign.pub /tmp/.docker/config.json'
                         }
                     }
 
@@ -519,13 +519,13 @@ pipeline {
                         container('deploy-sec-base') {
                             sh '''
                                 AUTH=$(printf '%s:%s' "$HARBOR_USER" "$HARBOR_PASS" | base64 | tr -d '\\n')
-                                mkdir -p ~/.docker
-                                printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > ~/.docker/config.json
+                                mkdir -p /tmp/.docker
+                                printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > /tmp/.docker/config.json
                             '''
 
                             if (fileExists('rendered.yaml')) {
                                 def tag = "harbor.tuxgrid.com/platform/scan-artifacts:${teamSlug}-${repoName}-${gitShort}-${envSlug}-rendered"
-                                withEnv(["ARTIFACT_TAG=${tag}"]) {
+                                withEnv(["ARTIFACT_TAG=${tag}", "DOCKER_CONFIG=/tmp/.docker"]) {
                                     sh '''
                                         cosign upload blob \
                                             -f rendered.yaml \
@@ -539,7 +539,7 @@ pipeline {
 
                             if (fileExists('tfplan')) {
                                 def tag = "harbor.tuxgrid.com/platform/scan-artifacts:${teamSlug}-${repoName}-${gitShort}-${envSlug}-tfplan"
-                                withEnv(["ARTIFACT_TAG=${tag}"]) {
+                                withEnv(["ARTIFACT_TAG=${tag}", "DOCKER_CONFIG=/tmp/.docker"]) {
                                     sh '''
                                         cosign upload blob \
                                             -f tfplan \
@@ -551,7 +551,7 @@ pipeline {
                                 echo "Pushed tfplan → ${tag}"
                             }
 
-                            sh 'rm -f ~/.docker/config.json'
+                            sh 'rm -f /tmp/.docker/config.json'
                         }
                     }
                 }
