@@ -1,0 +1,9 @@
+service:
+  slug: platform-agent-frontend
+  name: platform-agent-frontend
+  desc: "Platform agent Next.js frontend — authenticated web UI for the platform-agent chat interface"
+  git_url: https://github.com/pboyd-oss/platform-agent.git
+  workload: platform-agent-frontend
+  namespace: platform-agent
+  kind: deployment
+  jenkinsfile: frontend/Jenkinsfile

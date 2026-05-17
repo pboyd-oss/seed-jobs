@@ -654,7 +654,7 @@ pipelineJob('${buildJob}') {
                     branch('main')
                 }
             }
-            scriptPath('Jenkinsfile')
+            scriptPath(svc.jenkinsfile ?: 'Jenkinsfile')
         }
     }
     triggers { scm('H/5 * * * *') }
