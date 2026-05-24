@@ -108,6 +108,8 @@ private void checkCedarPromote(String environment) {
         'https://tuxgrid.com/attestation/tests/v1',
         'https://tuxgrid.com/attestation/scan/v1',
         'https://tuxgrid.com/attestation/pipeline/v1',
+        'slsaprovenance1',
+        'cyclonedx',
     ]
     def presentTypes = []
     withCredentials([
@@ -569,7 +571,7 @@ private void deployTerraform(String environment) {
         withEnv(["TOKEN_PAYLOAD=${payload}"]) {
             credsJson = sh(
                 script: '''
-                    curl -sf -X POST https://token-service.platform.svc.cluster.local/token \
+                    curl -sf -X POST http://token-service.platform.svc.cluster.local/token \
                         -H "Authorization: Bearer $(cat /run/secrets/oidc/token)" \
                         -H "X-K8s-Token: $(cat /run/secrets/kubernetes/token)" \
                         -H 'Content-Type: application/json' \
