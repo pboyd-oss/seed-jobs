@@ -91,11 +91,14 @@ def validateTeam(Map team, Map clouds, String path) {
         "${path}: team '${t.slug}' is not in allowed_teams for cloud '${t.build_cloud}'"
 
     t.environments?.each { env ->
-        assert env.cloud in cloudIndex :
-            "${path}: environment '${env.name}' references unknown cloud '${env.cloud}'"
-
-        assert t.slug in (cloudIndex[env.cloud].allowed_teams ?: []) :
-            "${path}: environment '${env.name}' — team '${t.slug}' is not in allowed_teams for cloud '${env.cloud}'"
+        if (env.type == 'aws') {
+            assert env.role_arn : "${path}: aws environment '${env.name}' requires role_arn"
+        } else {
+            assert env.cloud in cloudIndex :
+                "${path}: environment '${env.name}' references unknown cloud '${env.cloud}'"
+            assert t.slug in (cloudIndex[env.cloud].allowed_teams ?: []) :
+                "${path}: environment '${env.name}' — team '${t.slug}' is not in allowed_teams for cloud '${env.cloud}'"
+        }
     }
 
     t.repositories.each { repo ->
