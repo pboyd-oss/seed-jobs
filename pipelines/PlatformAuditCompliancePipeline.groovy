@@ -62,6 +62,15 @@ def lastSuccessfulBuildTime(String jobPath) {
     return build ? build.timeInMillis : -1L
 }
 
+@NonCPS
+def getArtifactsJsonText(String jobPath) {
+    def job          = Jenkins.get().getItemByFullName(jobPath)
+    def artifactsDir = job?.lastSuccessfulBuild?.artifactsDir
+    if (!artifactsDir) return null
+    def f = new File(artifactsDir, 'artifacts.json')
+    return f.exists() ? f.text : null
+}
+
 private void runComplianceScan() {
     def jobs = listTeamBuildJobs()
     if (!jobs) {
@@ -100,33 +109,28 @@ private void runComplianceScan() {
                 // Determine which attestation types exist on the most recent
                 // successful image. Requires artifacts.json to find the image ref.
                 def attestationTypes = []
-                def job              = Jenkins.get().getItemByFullName(j.path)
-                def lastBuild        = job?.lastSuccessfulBuild
-                def artifactsDir     = lastBuild?.artifactsDir
+                def artifactsText    = getArtifactsJsonText(j.path)
 
-                if (artifactsDir) {
-                    def artifactsFile = new File(artifactsDir, 'artifacts.json')
-                    if (artifactsFile.exists()) {
-                        try {
-                            def parsed   = readJSON(text: artifactsFile.text)
-                            def imageRef = parsed?.builds?.get(0)?.tag ?: ''
-                            if (imageRef) {
-                                def knownTypes = [
-                                    'https://tuxgrid.com/attestation/build/v1',
-                                    'https://tuxgrid.com/attestation/tests/v1',
-                                    'https://tuxgrid.com/attestation/scan/v1',
-                                    'https://tuxgrid.com/attestation/pipeline/v1',
-                                ]
-                                knownTypes.each { t ->
-                                    def rc = sh(
-                                        script: "cosign verify-attestation --key /tmp/cosign.pub --type '${t}' '${imageRef}' > /dev/null 2>&1 && echo ok || echo fail",
-                                        returnStdout: true
-                                    ).trim()
-                                    if (rc == 'ok') attestationTypes << t
-                                }
+                if (artifactsText) {
+                    try {
+                        def parsed   = readJSON(text: artifactsText)
+                        def imageRef = parsed?.builds?.get(0)?.tag ?: ''
+                        if (imageRef) {
+                            def knownTypes = [
+                                'https://tuxgrid.com/attestation/build/v1',
+                                'https://tuxgrid.com/attestation/tests/v1',
+                                'https://tuxgrid.com/attestation/scan/v1',
+                                'https://tuxgrid.com/attestation/pipeline/v1',
+                            ]
+                            knownTypes.each { t ->
+                                def rc = sh(
+                                    script: "cosign verify-attestation --key /tmp/cosign.pub --type '${t}' '${imageRef}' > /dev/null 2>&1 && echo ok || echo fail",
+                                    returnStdout: true
+                                ).trim()
+                                if (rc == 'ok') attestationTypes << t
                             }
-                        } catch (ignored) {}
-                    }
+                        }
+                    } catch (ignored) {}
                 }
 
                 // Call Cedar AuditCompliance.

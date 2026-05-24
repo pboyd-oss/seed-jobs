@@ -514,9 +514,8 @@ pipeline {
             when { expression { return params.ENVIRONMENT?.trim() && (fileExists('rendered.yaml') || fileExists('tfplan')) } }
             steps {
                 script {
-                    def parts    = params.UPSTREAM_JOB.split('/')
-                    def teamSlug = parts[1]
-                    def repoName = parts[2]
+                    def parts   = params.UPSTREAM_JOB.split('/')
+                    def jobSlug = params.UPSTREAM_JOB.replaceAll('/', '-').replaceAll('[^a-zA-Z0-9-]', '')
                     def gitShort = env.SCAN_GIT_COMMIT.take(7)
                     def envSlug  = params.ENVIRONMENT
 
@@ -533,7 +532,7 @@ pipeline {
                             '''
 
                             if (fileExists('rendered.yaml')) {
-                                def tag = "harbor.tuxgrid.com/platform/scan-artifacts:${teamSlug}-${repoName}-${gitShort}-${envSlug}-rendered"
+                                def tag = "harbor.tuxgrid.com/platform/scan-artifacts:${jobSlug}-${gitShort}-${envSlug}-rendered"
                                 withEnv(["ARTIFACT_TAG=${tag}", "DOCKER_CONFIG=/tmp/.docker"]) {
                                     sh '''
                                         cosign upload blob \
@@ -547,7 +546,7 @@ pipeline {
                             }
 
                             if (fileExists('tfplan')) {
-                                def tag = "harbor.tuxgrid.com/platform/scan-artifacts:${teamSlug}-${repoName}-${gitShort}-${envSlug}-tfplan"
+                                def tag = "harbor.tuxgrid.com/platform/scan-artifacts:${jobSlug}-${gitShort}-${envSlug}-tfplan"
                                 withEnv(["ARTIFACT_TAG=${tag}", "DOCKER_CONFIG=/tmp/.docker"]) {
                                     sh '''
                                         cosign upload blob \
