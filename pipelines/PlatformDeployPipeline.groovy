@@ -19,7 +19,7 @@ pipeline {
     agent {
         kubernetes {
             cloud 'kubernetes'
-            inheritFrom 'platform-builder'
+            inheritFrom 'platform-deploy-base'
             yaml '''
 spec:
   containers:
