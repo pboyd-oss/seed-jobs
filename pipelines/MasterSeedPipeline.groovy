@@ -122,8 +122,10 @@ def buildEnvVars(Map t, Map buildCloud) {
     ]
     t.environments?.each { env ->
         def upper = env.name.toUpperCase()
-        vars["TUXGRID_ENV_${upper}_CLOUD"] = env.cloud
-        if (env.namespace) vars["TUXGRID_ENV_${upper}_NAMESPACE"] = env.namespace
+        vars["TUXGRID_ENV_${upper}_CLOUD"] = env.cloud ?: ''
+        if (env.namespace)  vars["TUXGRID_ENV_${upper}_NAMESPACE"] = env.namespace
+        if (env.type)       vars["TUXGRID_ENV_${upper}_TYPE"]      = env.type
+        if (env.role_arn)   vars["TUXGRID_ENV_${upper}_ROLE_ARN"]  = env.role_arn
     }
     return vars
 }

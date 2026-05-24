@@ -1,0 +1,28 @@
+team:
+  name: "Team Beta"
+  slug: team-b
+  build_cloud: build-shared
+
+  members:
+    - username: jdoe
+      role: admin
+
+  repositories:
+    - name: data-pipeline
+      url: https://github.com/pboyd-oss/data-pipeline.git
+      jobs:
+        - name: build
+          type: multibranch
+          jenkinsfile: Jenkinsfile
+        - name: release
+          type: pipeline
+          branch: main
+          jenkinsfile: Jenkinsfile.release
+
+  environments:
+    - name: staging
+      type: aws
+      role_arn: arn:aws:iam::999999999999:role/platform-deploy-team-b-staging
+    - name: production-us
+      type: aws
+      role_arn: arn:aws:iam::111111111111:role/platform-deploy-team-b-prod

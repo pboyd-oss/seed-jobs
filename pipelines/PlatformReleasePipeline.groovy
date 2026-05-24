@@ -554,7 +554,12 @@ private void deployTerraform(String environment) {
 
     echo "Deploying to AWS '${environment}' via Token Service → terraform apply (pre-approved plan)"
 
+    def images   = readJSON(file: 'artifacts.json').builds
+    if (!images) error('artifacts.json contains no builds')
+    def imageRef = images[0].tag
+
     def payload = groovy.json.JsonOutput.toJson([
+        image_ref:   imageRef,
         environment: environment,
         role_arn:    roleArn,
     ])
