@@ -30,6 +30,10 @@ pipeline {
         cron('H 6 * * *')
     }
 
+    environment {
+        DOCKER_CONFIG = '/tmp/.docker'
+    }
+
     stages {
         stage('Scan') {
             steps {
@@ -93,8 +97,8 @@ private void runComplianceScan() {
             sh "printf '%s' \"\$COSIGN_PUBLIC_KEY\" > /tmp/cosign.pub"
             sh '''
                 AUTH=$(printf '%s:%s' "$HARBOR_USER" "$HARBOR_PASS" | base64 | tr -d '\\n')
-                mkdir -p ~/.docker
-                printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > ~/.docker/config.json
+                mkdir -p /tmp/.docker
+                mkdir -p /tmp/.docker && printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > /tmp/.docker/config.json
             '''
 
             jobs.each { j ->
@@ -170,7 +174,7 @@ private void runComplianceScan() {
                 }
             }
 
-            sh 'rm -f /tmp/cosign.pub ~/.docker/config.json'
+            sh 'rm -f /tmp/cosign.pub /tmp/.docker/config.json'
         }
     }
 

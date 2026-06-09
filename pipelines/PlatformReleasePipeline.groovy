@@ -31,6 +31,10 @@ pipeline {
         string(name: 'ENVIRONMENT',    description: 'Target environment (must match scan/v1 predicate environment field)')
     }
 
+    environment {
+        DOCKER_CONFIG = '/tmp/.docker'
+    }
+
     stages {
         stage('Fetch') {
             steps {
@@ -120,14 +124,14 @@ private void checkCedarPromote(String environment) {
             sh "printf '%s' \"\$COSIGN_PUBLIC_KEY\" > /tmp/cosign.pub"
             sh '''
                 AUTH=$(printf '%s:%s' "$HARBOR_USER" "$HARBOR_PASS" | base64 | tr -d '\\n')
-                mkdir -p ~/.docker
-                printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > ~/.docker/config.json
+                mkdir -p /tmp/.docker
+                mkdir -p /tmp/.docker && printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > /tmp/.docker/config.json
             '''
             knownTypes.each { t ->
                 def rc = sh(script: "cosign verify-attestation --key /tmp/cosign.pub --type '${t}' '${imageRef}' > /dev/null 2>&1 && echo ok || echo fail", returnStdout: true).trim()
                 if (rc == 'ok') presentTypes << t
             }
-            sh 'rm -f /tmp/cosign.pub ~/.docker/config.json'
+            sh 'rm -f /tmp/cosign.pub /tmp/.docker/config.json'
         }
     }
     log("Attestation types present: ${presentTypes}")
@@ -222,8 +226,8 @@ private void waitForBuildAttestations() {
             sh "printf '%s' \"\$COSIGN_PUBLIC_KEY\" > /tmp/cosign.pub"
             sh '''
                 AUTH=$(printf '%s:%s' "$HARBOR_USER" "$HARBOR_PASS" | base64 | tr -d '\\n')
-                mkdir -p ~/.docker
-                printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > ~/.docker/config.json
+                mkdir -p /tmp/.docker
+                mkdir -p /tmp/.docker && printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > /tmp/.docker/config.json
             '''
 
             try {
@@ -251,7 +255,7 @@ private void waitForBuildAttestations() {
                 }
                 error("Timed out after ${timeoutMins} minutes waiting for build attestations on ${imageRef}")
             } finally {
-                sh 'rm -f /tmp/cosign.pub ~/.docker/config.json'
+                sh 'rm -f /tmp/cosign.pub /tmp/.docker/config.json'
             }
         }
     }
@@ -309,8 +313,8 @@ sys.exit(1)
             sh "printf '%s' \"\$COSIGN_PUBLIC_KEY\" > /tmp/cosign.pub"
             sh '''
                 AUTH=$(printf '%s:%s' "$HARBOR_USER" "$HARBOR_PASS" | base64 | tr -d '\\n')
-                mkdir -p ~/.docker
-                printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > ~/.docker/config.json
+                mkdir -p /tmp/.docker
+                mkdir -p /tmp/.docker && printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > /tmp/.docker/config.json
             '''
 
             try {
@@ -322,7 +326,7 @@ sys.exit(1)
                 auditId         = result.auditId        as String
                 expectedDigest  = result.auditLogDigest as String
             } finally {
-                sh 'rm -f /tmp/cosign.pub ~/.docker/config.json extract_pipeline_predicate.py'
+                sh 'rm -f /tmp/cosign.pub /tmp/.docker/config.json extract_pipeline_predicate.py'
             }
         }
     }
@@ -402,8 +406,8 @@ sys.exit(1)
             sh "printf '%s' \"\$COSIGN_PUBLIC_KEY\" > /tmp/cosign.pub"
             sh '''
                 AUTH=$(printf '%s:%s' "$HARBOR_USER" "$HARBOR_PASS" | base64 | tr -d '\\n')
-                mkdir -p ~/.docker
-                printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > ~/.docker/config.json
+                mkdir -p /tmp/.docker
+                mkdir -p /tmp/.docker && printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > /tmp/.docker/config.json
             '''
 
             def exitCode = sh(
@@ -411,7 +415,7 @@ sys.exit(1)
                 returnStatus: true
             )
 
-            sh 'rm -f /tmp/cosign.pub ~/.docker/config.json find_predicate.py'
+            sh 'rm -f /tmp/cosign.pub /tmp/.docker/config.json find_predicate.py'
 
             if (exitCode != 0) {
                 error("No scan/v1 attestation with environment='${environment}' found on ${imageRef}. " +
@@ -434,8 +438,8 @@ private void pullAndVerifyArtifacts() {
         container('deploy-sec-base') {
             sh '''
                 AUTH=$(printf '%s:%s' "$HARBOR_USER" "$HARBOR_PASS" | base64 | tr -d '\\n')
-                mkdir -p ~/.docker
-                printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > ~/.docker/config.json
+                mkdir -p /tmp/.docker
+                mkdir -p /tmp/.docker && printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > /tmp/.docker/config.json
             '''
 
             try {
@@ -476,7 +480,7 @@ private void pullAndVerifyArtifacts() {
                           "scan pipeline must run with ENVIRONMENT set to produce pre-rendered artifacts")
                 }
             } finally {
-                sh 'rm -f ~/.docker/config.json'
+                sh 'rm -f /tmp/.docker/config.json'
             }
         }
     }
@@ -502,15 +506,15 @@ private void signImages() {
             sh '''
                 printf '%s' "$COSIGN_PRIVATE_KEY" > /tmp/cosign.key && chmod 600 /tmp/cosign.key
                 AUTH=$(printf '%s:%s' "$HARBOR_USER" "$HARBOR_PASS" | base64 | tr -d '\\n')
-                mkdir -p ~/.docker
-                printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > ~/.docker/config.json
+                mkdir -p /tmp/.docker
+                mkdir -p /tmp/.docker && printf '{"auths":{"harbor.tuxgrid.com":{"auth":"%s"}}}' "$AUTH" > /tmp/.docker/config.json
             '''
             for (int i = 0; i < images.size(); i++) {
                 withEnv(["IMAGE_REF=${images[i].tag}"]) {
                     sh 'COSIGN_PASSWORD="" cosign sign --key /tmp/cosign.key --yes --tlog-upload=false "$IMAGE_REF"'
                 }
             }
-            sh 'rm -f /tmp/cosign.key ~/.docker/config.json'
+            sh 'rm -f /tmp/cosign.key /tmp/.docker/config.json'
         }
     }
 }
