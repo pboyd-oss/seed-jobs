@@ -198,6 +198,7 @@ def folderEnvBlock(Map envVars) {
 }
 
 def multibranchBlock(String jobPath, Map repo, Map job) {
+    def pollTriggers = (job.poll == false) ? "" : "    triggers {\n        periodicFolderTrigger { interval('300000') }\n    }\n"
     return """
 multibranchPipelineJob('${jobPath}') {
     displayName('${job.name}')
@@ -213,10 +214,7 @@ multibranchPipelineJob('${jobPath}') {
             scriptPath('${job.jenkinsfile ?: 'Jenkinsfile'}')
         }
     }
-    triggers {
-        periodicFolderTrigger { interval('300000') }
-    }
-    orphanedItemStrategy {
+${pollTriggers}    orphanedItemStrategy {
         discardOldItems { numToKeep(10) }
     }
 }

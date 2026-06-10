@@ -58,6 +58,7 @@ team:
         - name: build
           type: multibranch
           jenkinsfile: Jenkinsfile
+          poll: false
 
     - name: platform-agent
       url: https://github.com/pboyd-oss/platform-agent.git
