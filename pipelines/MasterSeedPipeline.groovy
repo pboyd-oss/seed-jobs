@@ -46,6 +46,7 @@ pipeline {
                     allDsl.append(buildPlatformBakeryFolderDsl())
                     allDsl.append(buildPlatformInfraFolderDsl())
                     allDsl.append(buildPlatformServicesFolderDsl())
+                    allDsl.append(buildEcrProvisionDsl())
 
                     findFiles(glob: 'platform/bakery/*.yml').each     { f -> allDsl.append(buildBakeryDsl(readYaml(file: f.path).bakery, versions)) }
                     findFiles(glob: 'platform/infra/*.yml').each      { f -> allDsl.append(buildInfraDsl(readYaml(file: f.path).infra)) }
@@ -863,4 +864,41 @@ pipelineJob('${attestJob}') {
 }
 
 """
+}
+
+// Stub ECR provisioner so the platform-agent ECR flow completes end-to-end.
+// Real AWS apply is intentionally skipped: this cluster has no AWS credentials
+// (and terraform init is blocked by the build egress allowlist). Swap the inline
+// script for a terraform-apply runner once AWS creds + a state backend exist.
+def buildEcrProvisionDsl() {
+    return '''
+pipelineJob('platform/ecr-provision') {
+    displayName('ecr-provision')
+    description('Stub ECR provisioner. platform-agent commits terraform/ecr/<name>.tf and triggers this job. Real AWS apply is SKIPPED - no AWS credentials in this cluster.')
+    parameters {
+        stringParam('repo_name', '', 'ECR repository name')
+    }
+    definition {
+        cps {
+            sandbox(true)
+            script("""
+pipeline {
+  agent { kubernetes { inheritFrom 'platform-builder' } }
+  options { timeout(time: 5, unit: 'MINUTES') }
+  stages {
+    stage('ECR provision (stub)') {
+      steps {
+        echo 'ECR provision: terraform committed to terraform/ecr/. AWS apply SKIPPED - no AWS credentials in this cluster.'
+        echo 'To enable real provisioning: add AWS creds + a terraform-apply runner.'
+      }
+    }
+  }
+}
+""")
+        }
+    }
+    logRotator(-1, 20)
+}
+
+'''
 }
