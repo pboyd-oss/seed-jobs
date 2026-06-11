@@ -169,6 +169,23 @@ pipeline {
                 }
             }
         }
+
+        stage('Jenkinsfile Approval') {
+            // Source-level check: is scan-src/Jenkinsfile a thin platform template?
+            // Advisory here (archived as source-scan.json + carried to the coordinator by
+            // the attest shim); the hard gate is enforced in Cedar (no-custom-jenkinsfile.cedar)
+            // for opt-in strict pipelines only. Catches raw script-level Groovy that emits no
+            // FlowNode (.execute(), @NonCPS) which the runtime customStepCount cannot see.
+            steps {
+                script {
+                    def jf = fileExists('scan-src/Jenkinsfile') ? readFile('scan-src/Jenkinsfile') : null
+                    def res = checkThinJenkinsfile(jf)
+                    writeJSON file: 'source-scan.json', json: [jenkinsfileApproved: res.approved, reasons: res.reasons]
+                    archiveArtifacts artifacts: 'source-scan.json', allowEmptyArchive: true
+                    echo "[Platform] jenkinsfileApproved=${res.approved} reasons=${res.reasons}"
+                }
+            }
+        }
     }
 
     post {
@@ -183,4 +200,23 @@ pipeline {
             }
         }
     }
+}
+
+
+// Returns [approved: bool, reasons: [..]]. A "thin" Jenkinsfile invokes
+// microservicePipeline and contains no raw-execution / sandbox-escape constructs, so
+// all build logic flows through platform library steps (which Tetragon observes). The
+// check is a structural heuristic (evadable via string-building) backstopped by the
+// Tetragon anomaly gate and the CPS sandbox -- not a sole line of defence.
+def checkThinJenkinsfile(String src) {
+    if (!src?.trim()) return [approved: false, reasons: ['no Jenkinsfile at repo root']]
+    def code = src.replaceAll('(?s)/\\*.*?\\*/', ' ').replaceAll('(?m)//.*$', ' ')
+    def forbidden = ['.execute(', 'ProcessBuilder', '@NonCPS', 'evaluate(', '.metaClass',
+                     'System.', 'Runtime.', 'Thread.', 'new File', 'readFile', 'writeFile',
+                     'node {', 'node{', 'node(', 'script {', 'script{', 'sh ', 'sh(',
+                     'bat ', 'powershell', 'load(', 'load ']
+    def reasons = []
+    forbidden.each { tok -> if (code.contains(tok)) reasons << ('forbidden construct: ' + tok.trim()) }
+    if (!(code =~ /\bmicroservicePipeline\b/)) reasons << 'does not invoke microservicePipeline'
+    return [approved: reasons.isEmpty(), reasons: reasons]
 }
