@@ -1,5 +1,9 @@
 # CLAUDE.md - seed-jobs
 
+## Purpose
+
+The Jenkins Job DSL seed repository for the platform. `MasterSeedPipeline.groovy` reads team and platform YAML files, generates all Jenkins job and folder DSL in a single `jobDsl()` call, and provisions every pipeline (team builds, bakery image builds, platform services, compliance scans, infra Terraform) from a clean Jenkins master. It is the single source of truth for job structure; removing an entry deletes the corresponding Jenkins job (`removedJobAction: DELETE`).
+
 ## What this repo is
 
 A Jenkins Job DSL repository. The master seed pipeline reads YAML files, generates Job DSL code as a string, and submits it to Jenkins via the `jobDsl` step. The resulting jobs all reference pipeline Groovy scripts in this same repo.
