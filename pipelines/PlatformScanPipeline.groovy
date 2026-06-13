@@ -243,51 +243,35 @@ pipeline {
                         //   github_actions — GitHub Actions workflow files (injection, permissions)
                         //   secrets        — hardcoded credentials in any source file
                         //
-                        // --quiet suppresses stdout progress so the redirect captures clean JSON.
-                        def exitCode = sh(
+                        // --hard-fail-on <severity> is a silent no-op here (severity metadata needs
+                        // egress to api0.prismacloud.io, which build pods cannot reach), so we enforce
+                        // on the parsed results via gateCheckov(). --skip-download avoids the futile
+                        // guidelines fetch and its timeout. returnStatus so the gate (not checkov's own
+                        // exit code) decides pass/fail.
+                        sh(
                             script: """
                                 checkov -d scan-src/ \
                                     --framework terraform,dockerfile,kubernetes,helm,kustomize,github_actions,secrets \
-                                    --hard-fail-on HIGH,CRITICAL \
                                     --compact \
                                     --quiet \
+                                    --skip-download \
                                     --output json \
                                     > checkov-result.json
                             """,
                             returnStatus: true
                         )
 
-                        if (fileExists('checkov-result.json')) {
-                            def raw = readFile('checkov-result.json').trim()
-                            if (raw && raw.startsWith('[') || raw.startsWith('{')) {
-                                def parsed     = readJSON(text: raw)
-                                def allResults = parsed instanceof List ? parsed : [parsed]
-                                def totalFailed = 0
-                                def totalPassed = 0
-                                def byFramework = [:]
+                        // kustomize re-scans the base manifests through every overlay (double-counting
+                        // the kubernetes findings) plus overlay-only noise, so it is reported but not
+                        // gated — the real issues surface via the kubernetes/dockerfile frameworks.
+                        def res = gateCheckov('checkov-result.json', 'Checkov',
+                            ['terraform', 'dockerfile', 'kubernetes', 'helm', 'github_actions', 'secrets'])
+                        env.CHECKOV_FAILED       = res.totalFailed.toString()
+                        env.CHECKOV_PASSED       = res.totalPassed.toString()
+                        env.CHECKOV_BY_FRAMEWORK = groovy.json.JsonOutput.toJson(res.byFramework)
 
-                                allResults.each { r ->
-                                    def fw   = r.check_type ?: 'unknown'
-                                    def fail = (r.summary?.failed ?: 0) as int
-                                    def pass = (r.summary?.passed ?: 0) as int
-                                    totalFailed += fail
-                                    totalPassed += pass
-                                    byFramework[fw] = [passed: pass, failed: fail]
-                                }
-
-                                env.CHECKOV_FAILED       = totalFailed.toString()
-                                env.CHECKOV_PASSED       = totalPassed.toString()
-                                env.CHECKOV_BY_FRAMEWORK = groovy.json.JsonOutput.toJson(byFramework)
-
-                                echo "Checkov: ${totalPassed} passed, ${totalFailed} failed"
-                                byFramework.each { fw, counts ->
-                                    if (counts.failed > 0) echo "  ${fw}: ${counts.failed} failed, ${counts.passed} passed"
-                                }
-                            }
-                        }
-
-                        if (exitCode != 0) {
-                            error("Checkov found HIGH/CRITICAL failures: ${env.CHECKOV_FAILED} failed checks")
+                        if (res.blockingFailed > 0) {
+                            error("Checkov gate failed: ${res.blockingFailed} failing checks in enforced frameworks (${res.blockingDetail})")
                         }
                     }
                 }
@@ -344,38 +328,26 @@ pipeline {
                     env.CHECKOV_RENDERED_PASSED = '0'
 
                     container('deploy-sec-base') {
-                        def exitCode = sh(
+                        sh(
                             script: '''
                                 checkov -f rendered.yaml \
                                     --framework kubernetes \
-                                    --hard-fail-on HIGH,CRITICAL \
                                     --compact \
                                     --quiet \
+                                    --skip-download \
                                     --output json \
                                     > checkov-rendered-result.json
                             ''',
                             returnStatus: true
                         )
 
-                        if (fileExists('checkov-rendered-result.json')) {
-                            def raw = readFile('checkov-rendered-result.json').trim()
-                            if (raw && (raw.startsWith('[') || raw.startsWith('{'))) {
-                                def parsed     = readJSON(text: raw)
-                                def allResults = parsed instanceof List ? parsed : [parsed]
-                                def totalFailed = 0
-                                def totalPassed = 0
-                                allResults.each { r ->
-                                    totalFailed += (r.summary?.failed ?: 0) as int
-                                    totalPassed += (r.summary?.passed ?: 0) as int
-                                }
-                                env.CHECKOV_RENDERED_FAILED = totalFailed.toString()
-                                env.CHECKOV_RENDERED_PASSED = totalPassed.toString()
-                                echo "Checkov Rendered: ${totalPassed} passed, ${totalFailed} failed"
-                            }
-                        }
+                        // The rendered manifest is what actually deploys — gate on any failure.
+                        def res = gateCheckov('checkov-rendered-result.json', 'Checkov Rendered', null)
+                        env.CHECKOV_RENDERED_FAILED = res.totalFailed.toString()
+                        env.CHECKOV_RENDERED_PASSED = res.totalPassed.toString()
 
-                        if (exitCode != 0) {
-                            error("Checkov found HIGH/CRITICAL failures in rendered manifest: ${env.CHECKOV_RENDERED_FAILED} failed checks")
+                        if (res.blockingFailed > 0) {
+                            error("Checkov gate failed on rendered manifest: ${res.blockingFailed} failing checks")
                         }
                     }
                 }
@@ -472,38 +444,26 @@ pipeline {
             steps {
                 script {
                     container('deploy-sec-base') {
-                        def exitCode = sh(
+                        sh(
                             script: '''
                                 checkov -f tfplan.json \
                                     --framework terraform_plan \
-                                    --hard-fail-on HIGH,CRITICAL \
                                     --compact \
                                     --quiet \
+                                    --skip-download \
                                     --output json \
                                     > checkov-plan-result.json
                             ''',
                             returnStatus: true
                         )
 
-                        if (fileExists('checkov-plan-result.json')) {
-                            def raw = readFile('checkov-plan-result.json').trim()
-                            if (raw && (raw.startsWith('[') || raw.startsWith('{'))) {
-                                def parsed     = readJSON(text: raw)
-                                def allResults = parsed instanceof List ? parsed : [parsed]
-                                def totalFailed = 0
-                                def totalPassed = 0
-                                allResults.each { r ->
-                                    totalFailed += (r.summary?.failed ?: 0) as int
-                                    totalPassed += (r.summary?.passed ?: 0) as int
-                                }
-                                env.CHECKOV_PLAN_FAILED = totalFailed.toString()
-                                env.CHECKOV_PLAN_PASSED = totalPassed.toString()
-                                echo "Checkov Plan: ${totalPassed} passed, ${totalFailed} failed"
-                            }
-                        }
+                        // The plan is what actually applies — gate on any failure.
+                        def res = gateCheckov('checkov-plan-result.json', 'Checkov Plan', null)
+                        env.CHECKOV_PLAN_FAILED = res.totalFailed.toString()
+                        env.CHECKOV_PLAN_PASSED = res.totalPassed.toString()
 
-                        if (exitCode != 0) {
-                            error("Checkov found HIGH/CRITICAL failures in Terraform plan: ${env.CHECKOV_PLAN_FAILED} failed checks")
+                        if (res.blockingFailed > 0) {
+                            error("Checkov gate failed on Terraform plan: ${res.blockingFailed} failing checks")
                         }
                     }
                 }
@@ -723,4 +683,56 @@ pipeline {
             }
         }
     }
+}
+
+// Offline, fail-closed Checkov gate.
+//
+// checkov's `--hard-fail-on <SEVERITY>` silently no-ops in this environment: severity
+// metadata is fetched from api0.prismacloud.io, which the hardened build pods cannot reach,
+// so checkov loads zero severities, classifies nothing as HIGH/CRITICAL, and exits 0 even
+// with failing checks. We therefore enforce on the parsed JSON results instead, and fail
+// CLOSED if checkov produced no parseable output (crash / no run) so a broken scan can never
+// pass silently. `enforced` lists the frameworks whose failures block the build; pass null
+// to block on any failed check. Returns the parsed counts plus blockingFailed/blockingDetail.
+def gateCheckov(String jsonFile, String label, List enforced) {
+    if (!fileExists(jsonFile)) {
+        error("${label}: checkov produced no '${jsonFile}' (crash or no run) — failing closed")
+    }
+    String raw = readFile(jsonFile).trim()
+    if (!raw || !(raw.startsWith('[') || raw.startsWith('{'))) {
+        error("${label}: '${jsonFile}' is not valid checkov JSON — failing closed")
+    }
+    def parsed  = readJSON(text: raw)
+    def results = (parsed instanceof List) ? parsed : [parsed]
+    def byFramework = [:]
+    int totalFailed = 0
+    int totalPassed = 0
+    results.each { r ->
+        String fw = r.check_type ?: 'unknown'
+        int f = (r.summary?.failed ?: 0) as int
+        int p = (r.summary?.passed ?: 0) as int
+        byFramework[fw] = [passed: p, failed: f]
+        totalFailed += f
+        totalPassed += p
+    }
+
+    int blockingFailed = 0
+    def blockingParts = []
+    echo "${label}: ${totalPassed} passed, ${totalFailed} failed"
+    byFramework.each { fw, c ->
+        if (c.failed > 0) {
+            boolean gated = (enforced == null) || enforced.contains(fw)
+            echo "  ${fw}: ${c.failed} failed, ${c.passed} passed${gated ? '' : ' (report-only)'}"
+            if (gated) {
+                blockingFailed += c.failed
+                blockingParts << "${fw}=${c.failed}"
+            }
+        }
+    }
+
+    return [byFramework   : byFramework,
+            totalFailed   : totalFailed,
+            totalPassed   : totalPassed,
+            blockingFailed: blockingFailed,
+            blockingDetail: blockingParts.join(', ')]
 }
