@@ -47,6 +47,7 @@ pipeline {
                     allDsl.append(buildPlatformInfraFolderDsl())
                     allDsl.append(buildPlatformServicesFolderDsl())
                     allDsl.append(buildEcrProvisionDsl())
+                    allDsl.append(buildPlatformIdpDsl())
 
                     findFiles(glob: 'platform/bakery/*.yml').each     { f -> allDsl.append(buildBakeryDsl(readYaml(file: f.path).bakery, versions)) }
                     findFiles(glob: 'platform/infra/*.yml').each      { f -> allDsl.append(buildInfraDsl(readYaml(file: f.path).infra)) }
@@ -271,6 +272,37 @@ folder('platform/infra') {
     displayName('infra')
     description('Platform-controlled infrastructure pipelines — Terraform GitOps.')
     ${platformAuthBlock()}
+}
+
+"""
+}
+
+def buildPlatformIdpDsl() {
+    def auth = platformAuthBlock()
+    return """
+folder('platform/idp') {
+    displayName('idp')
+    description('Internal Developer Platform — converging-apply pipeline (platform-build, Phase 0-1+).')
+    ${auth}
+}
+
+pipelineJob('platform/idp/apply') {
+    displayName('apply')
+    description('IDP converging-loop apply (merge-apply / drift-sweep). Source: gitea pboyd/platform-build jenkins/apply/Jenkinsfile. Params + triggers are declared in the Jenkinsfile.')
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://gitea.tuxgrid.com/pboyd/platform-build.git')
+                    }
+                    branch('main')
+                }
+            }
+            scriptPath('jenkins/apply/Jenkinsfile')
+        }
+    }
+    logRotator(-1, 50)
 }
 
 """
