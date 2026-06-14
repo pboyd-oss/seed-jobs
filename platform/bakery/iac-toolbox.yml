@@ -1,4 +1,4 @@
 bakery:
   name: iac-toolbox
-  description: "IaC toolbox — OpenTofu + Terramate + jq. The 'iac' container for the IDP PR-gate, converging-apply, and module-publish pipelines."
+  description: "IaC toolbox — OpenTofu + Terramate + jq. The iac container for the IDP PR-gate, converging-apply, and module-publish pipelines."
   git_url: https://github.com/pboyd-oss/iac-toolbox.git
