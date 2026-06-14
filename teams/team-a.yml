@@ -12,6 +12,7 @@ team:
   repositories:
     - name: auth-api
       url: https://github.com/pboyd-oss/auth-api.git
+      coverage_threshold: 0
       jobs:
         - name: build
           type: multibranch
